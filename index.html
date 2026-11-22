@@ -31,7 +31,7 @@ canvas#c{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display
 .ibtn .dot{position:absolute;top:5px;right:5px;width:8px;height:8px;border-radius:50%;background:#ff9a4a;box-shadow:0 0 8px #ff9a4a;display:none}
 .zoom{position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom) + 14px);z-index:4;display:flex;flex-direction:column;gap:8px}
 #mini{position:fixed;left:12px;bottom:calc(env(safe-area-inset-bottom) + 14px);z-index:4;width:150px;height:104px;border-radius:10px;border:1px solid #5d4a2a;background:#0b0907d9;box-shadow:inset 0 0 0 2px #0a0806,inset 0 0 0 3px #3a2d1a55,0 4px 14px #000a;touch-action:none;display:none}
-body.sheet-open.mobile .zoom,body.sheet-open.mobile #mini{display:none!important}
+body.sheet-open.mobile .zoom,body.sheet-open.mobile #mini,body.sheet-open .badge{display:none!important}
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:8;max-height:64vh;transform:translateY(105%);transition:transform .28s cubic-bezier(.2,.8,.2,1);background:var(--panel);border-top:1px solid #7a6136;box-shadow:0 -12px 40px #000d,inset 0 1px 0 #c9a55a33;border-radius:18px 18px 0 0;overflow:auto;-webkit-overflow-scrolling:touch;padding:12px 16px calc(18px + env(safe-area-inset-bottom))}
 .sheet.open{transform:none}
 .sheet:before{content:"";display:block;width:44px;height:4px;border-radius:2px;background:#5d4a2a;margin:0 auto 10px}
@@ -530,7 +530,7 @@ function personHTML(id){const p=P_(id);if(!p)return'';const b=K.bd.get(id),r=rel
   if(p.notes)facts.push(`<div class="fact"><b>Notes</b><span style="white-space:pre-wrap">${esc(p.notes)}</span></div>`);
   facts.push(`<div class="fact"><b>Gen.</b><span>${ROMAN[K.gen.get(id)]||K.gen.get(id)+1} <span style="color:var(--muted)">(ring ${K.gen.get(id)+1} from the centre)</span></span></div>`);
   const pars=parentsOf(id),parts=partnersOf(id),kids=kidsOf(id),sibs=siblingsOf(id);
-  const acts=ro?'':`<div class="actions">
+  const acts=ro?`<div class="row"><button class="btn ghost" data-act="me">${S.meId===id?'Not me':'This is me'}</button></div>`:`<div class="actions">
     <button class="act" data-act="add" data-rel="parent" ${pars.length>=2?'disabled':''}><span>↑</span>Parent</button>
     <button class="act" data-act="add" data-rel="partner"><span>♢</span>Partner</button>
     <button class="act" data-act="add" data-rel="child"><span>↓</span>Child</button>
@@ -560,8 +560,9 @@ function menuHTML(){const ro=S.readOnly;const opts=[...S.people.values()].sort((
   <label class="f">I am…</label><select id="meSel"><option value="">— Not set —</option>${opts}</select>
   <div class="hint">Setting yourself shows how everyone is related to you, and lights up the path between you and whoever you tap.</div>
   <label class="f">Layout</label><div class="seg"><button id="mR" class="${S.mode==='radial'?'on':''}">Constellation</button><button id="mT" class="${S.mode==='tree'?'on':''}">Tree</button></div>
+  <div class="sec">EDITING</div>${ro?`<div class="hint" style="margin-top:0">View only on this device. Enter the family code to add or change people.</div><div style="display:flex;gap:8px;margin-top:8px"><input id="admCode" type="password" inputmode="numeric" autocomplete="off" placeholder="Family code"><button class="btn" id="admGo" style="flex:none">Unlock</button></div>`:`<div class="hint" style="margin-top:0">✦ Editing is unlocked on this device.</div><div class="row"><button class="btn ghost" id="admLock">Lock editing</button></div>`}
   <div class="sec">SYNC</div><div class="syncrow"><span class="syncdot ${syncState}" id="syncdot"></span><span id="syncword"></span></div>
-  <div class="sec">BACKUP</div><div class="row" style="margin-top:0"><button class="btn ghost" id="bkDl">Download backup</button><button class="btn ghost" id="bkImp">Restore…</button></div>
+  <div class="sec">BACKUP</div><div class="row" style="margin-top:0"><button class="btn ghost" id="bkDl">Download backup</button><button class="btn ghost" id="bkImp" ${ro?'disabled':''}>Restore…</button></div>
   ${ro?'':`<div class="sec">ADD PEOPLE</div><div class="row" style="margin-top:0"><button class="btn" id="impFam">Import family info</button></div><div class="row"><button class="btn ghost" id="addRoot">Add unlinked person</button></div>
   <div class="row"><button class="btn ghost" id="sample">Load sample family</button><button class="btn danger" id="wipe" ${K.count?'':'disabled'}>Clear tree</button></div>`}
   <div class="sec">ACTIVITY LOG</div><div class="hint" style="margin-top:0">${actlog.length?actlog.length+' entries recorded.':'No activity recorded yet.'}</div><div class="row"><button class="btn ghost" id="logDl">Export log</button><button class="btn ghost" id="logClr">Clear log</button></div>
@@ -570,6 +571,8 @@ function menuHTML(){const ro=S.readOnly;const opts=[...S.people.values()].sort((
 function bindMenu(){const g=s=>$(s);g('#meSel').onchange=e=>setMe(e.target.value||null);g('#mR').onclick=()=>setMode('radial');g('#mT').onclick=()=>setMode('tree');
   if(g('#famSave'))g('#famSave').onclick=()=>{const v=g('#famIn').value.trim().slice(0,40)||'Our Family';saveFamilyName(v)};
   cloudSay(syncState);
+  if(g('#admGo')){const go=()=>tryUnlock(g('#admCode').value);g('#admGo').onclick=go;g('#admCode').onkeydown=e=>{if(e.key==='Enter')go()}}
+  if(g('#admLock'))g('#admLock').onclick=()=>{setAdmin(false);toast('Locked — view only')};
   g('#bkDl').onclick=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');downloadFile(`${APP.key}-backup-${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}.json`,JSON.stringify({familyName:S.familyName,people:[...S.people.values()]},null,1),'application/json');log('backup','downloaded '+K.count+' people');toast('Backup downloaded')};
   g('#logDl').onclick=()=>{if(!actlog.length)return toast('Nothing in the log yet');downloadFile(APP.key+'-log.txt',logText());toast('Log exported')};
   g('#logClr').onclick=()=>{actlog=[];try{STORE.set(LOG_KEY,'[]')}catch(e){}renderSheet();toast('Log cleared')};
@@ -877,7 +880,7 @@ async function finishImport(){const E=IMP.entries.filter(e=>e.include);const ch=
   toast(`Added ${added}, updated ${updated}${skipped?` · ${skipped} link${skipped>1?'s':''} skipped (would clash)`:''}`,3500)}
 
 /* ---------- persistence: local first, Firebase mirror ---------- */
-const APP={title:'Family Constellation',key:'familytree-v1',dbPath:'familytree/main',build:'Build 1 · 20 Nov 2026',
+const APP={title:'Family Constellation',key:'familytree-v1',dbPath:'familytree/main',build:'Build 2 · 22 Nov 2026',adminHash:'8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92',
   links:[{label:'Stored data',url:'https://console.firebase.google.com/project/shopping-eb9b3/database/shopping-eb9b3-default-rtdb/data/~2Ffamilytree~2Fmain'},
     {label:'Firebase rules',url:'https://console.firebase.google.com/project/shopping-eb9b3/database/shopping-eb9b3-default-rtdb/rules'},
     {label:'GitHub repository',url:'https://github.com/Eli-Meyer42/FamilyTree'},
@@ -928,17 +931,23 @@ function cloudStart(onFirst){try{if(typeof firebase==='undefined'){cloudSay('off
   catch(e){cloudSay('error');log('cloud-err',e&&e.message);onFirst()}}
 function cloudPush(){if(!cloudRef)return;clearTimeout(pushT);pushT=setTimeout(()=>{const d=snap();cloudSeen=d.rev;cloudSay('saving');
   cloudRef.set(d).then(()=>cloudSay('live')).catch(e=>{cloudSay('error');log('cloud-err','write failed: '+(e&&e.message))})},400)}
-async function commit(ch,removed=[]){for(const id of removed)S.people.delete(id);for(const p of ch.values())S.people.set(p.id,p);
+async function commit(ch,removed=[]){if(S.readOnly){toast('View only — unlock editing in the menu',2500);return false}for(const id of removed)S.people.delete(id);for(const p of ch.values())S.people.set(p.id,p);
   derive();if(S.sel&&!has(S.sel))S.sel=null;computeHL();if(S.sheet)renderSheet();updateChrome();req();
   log('edit',`${ch.size} saved${removed.length?', '+removed.length+' removed':''}`);return save()}
-function saveFamilyName(v){S.familyName=v;$('#famName').textContent=v;req();save();toast('Saved')}
+function saveFamilyName(v){if(S.readOnly)return;S.familyName=v;$('#famName').textContent=v;req();save();toast('Saved')}
 function setMe(id){S.meId=id;lsSet(APP.key+'-me',id);derive();computeHL();if(S.sheet)renderSheet();req()}
+const ADMIN_KEY=APP.key+'-admin';
+async function sha256(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+function setAdmin(on){S.readOnly=!on;lsSet(ADMIN_KEY,on?APP.adminHash:null);log(on?'unlock':'lock','');derive();updateChrome();if(S.sheet)renderSheet();req()}
+async function tryUnlock(code){let h='';try{h=await sha256(String(code).trim())}catch(e){return toast('Unlocking needs a secure (https) page',3000)}
+  if(h===APP.adminHash){setAdmin(true);toast('Editing unlocked on this device')}else{toast('That code isn’t right');log('unlock-fail','')}}
 async function wipe(){const ids=[...S.people.keys()];closeSheet();await commit(new Map(),ids);setMe(null);log('wipe','all people cleared');toast('Tree cleared')}
 function updateChrome(){$('#famName').textContent=S.familyName;document.title=S.familyName&&S.familyName!=='Our Family'?S.familyName+' · Family Constellation':'Family Constellation';$('#loading').classList.toggle('on',S.storage==='loading');
   const empty=S.storage!=='loading'&&!K.count;$('#empty').classList.toggle('on',empty);
-  if(empty)$('#emptyCard').innerHTML=`<h2>Begin your constellation</h2><p>Add anyone to start — grandparents, yourself, a cousin. Then grow outward: tap a person to add their parents, partner, children or siblings, and they settle into the right place.</p><div class="row"><button class="btn" id="eAdd">Add first person</button></div><div class="row"><button class="btn ghost" id="eImp">Import family info</button></div><div class="row"><button class="btn ghost" id="eRestore">Restore a backup</button></div><div class="row"><button class="btn ghost" id="eSample">Explore a sample family</button></div>`;
-  if($('#eAdd'))$('#eAdd').onclick=()=>openForm({kind:'add',rel:'root'});if($('#eImp'))$('#eImp').onclick=importDlgFamily;if($('#eSample'))$('#eSample').onclick=loadSample;if($('#eRestore'))$('#eRestore').onclick=importDlg;
-  $('#badge').style.display='none'}
+  if(empty&&S.readOnly)$('#emptyCard').innerHTML=`<h2>An empty sky</h2><p>No one has been added to this tree yet.</p><div class="row"><button class="btn ghost" id="eUnlock">I have the family code</button></div>`;
+  else if(empty)$('#emptyCard').innerHTML=`<h2>Begin your constellation</h2><p>Add anyone to start — grandparents, yourself, a cousin. Then grow outward: tap a person to add their parents, partner, children or siblings, and they settle into the right place.</p><div class="row"><button class="btn" id="eAdd">Add first person</button></div><div class="row"><button class="btn ghost" id="eImp">Import family info</button></div><div class="row"><button class="btn ghost" id="eRestore">Restore a backup</button></div><div class="row"><button class="btn ghost" id="eSample">Explore a sample family</button></div>`;
+  if($('#eAdd'))$('#eAdd').onclick=()=>openForm({kind:'add',rel:'root'});if($('#eImp'))$('#eImp').onclick=importDlgFamily;if($('#eSample'))$('#eSample').onclick=loadSample;if($('#eRestore'))$('#eRestore').onclick=importDlg;if($('#eUnlock'))$('#eUnlock').onclick=()=>openSheet('menu');
+  const bd=$('#badge');bd.textContent='View only';bd.style.display=S.readOnly&&K.count?'block':'none'}
 
 /* ---------- sample family ---------- */
 function loadSample(){const t=today0();const soon=(days,year)=>{const d=new Date(t.getFullYear(),t.getMonth(),t.getDate()+days);return`${year}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
@@ -958,7 +967,7 @@ function loadSample(){const t=today0();const soon=(days,year)=>{const d=new Date
 
 /* ---------- boot ---------- */
 (async function boot(){
-  S.mode=lsGet('fc.mode')==='tree'?'tree':'radial';$('#modeBtn').innerHTML=S.mode==='radial'?ICON_RADIAL:ICON_TREE;S.meId=lsGet(APP.key+'-me');
+  S.mode=lsGet('fc.mode')==='tree'?'tree':'radial';$('#modeBtn').innerHTML=S.mode==='radial'?ICON_RADIAL:ICON_TREE;S.meId=lsGet(APP.key+'-me');S.readOnly=lsGet(ADMIN_KEY)!==APP.adminHash;
   try{const raw=await STORE.get(APP.key);if(raw)applyState(JSON.parse(raw))}catch(e){}
   try{const r=await STORE.get(LOG_KEY);if(r)actlog=JSON.parse(r)||[]}catch(e){}
   log('open',APP.build);
