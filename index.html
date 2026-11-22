@@ -91,9 +91,9 @@ label.f{display:block;font-size:12px;color:var(--muted);text-transform:uppercase
 .card h2{font-family:Cinzel,serif;color:var(--gold2);margin:0 0 6px;font-size:22px}
 .card p{color:var(--muted);margin:0 0 14px;line-height:1.45}
 .loading .card{pointer-events:none;font-family:Cinzel,serif;color:var(--gold);letter-spacing:.08em}
-.toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 64px);transform:translate(-50%,-8px);z-index:30;background:#1a130b;border:1px solid #7a6136;color:var(--gold2);padding:8px 14px;border-radius:999px;font-size:13.5px;opacity:0;transition:.25s;pointer-events:none;max-width:90vw;text-align:center}
+.toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 96px);transform:translate(-50%,-8px);z-index:30;background:#1a130b;border:1px solid #7a6136;color:var(--gold2);padding:8px 14px;border-radius:999px;font-size:13.5px;opacity:0;transition:.25s;pointer-events:none;max-width:90vw;text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,0)}
-.badge{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 18px);z-index:3;font-size:11.5px;color:var(--muted);background:#0b0907cc;border:1px solid #3a2d1a;padding:4px 10px;border-radius:999px;display:none;pointer-events:none}
+.badge{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top) + 62px);z-index:3;font-size:11.5px;color:var(--muted);background:#0b0907cc;border:1px solid #3a2d1a;padding:4px 10px;border-radius:999px;display:none;pointer-events:none}
 .syncrow{display:flex;align-items:center;gap:9px;font-size:14px;color:var(--muted);padding:2px 2px 4px}
 .syncdot{width:9px;height:9px;border-radius:50%;flex:none;background:#6b6355}
 .syncdot.live{background:#4fb07a;box-shadow:0 0 8px #4fb07a}.syncdot.saving{background:#d6b24a}.syncdot.error{background:#c4584a}.syncdot.offline{background:#8a7a5a}
@@ -282,10 +282,19 @@ function derive(){
   for(let it=0;it<16;it++){for(let gi=0;gi<=maxG;gi++)place(byGen[gi],byGen[gi].map(both));for(let gi=maxG;gi>=0;gi--)place(byGen[gi],byGen[gi].map(both))}
   for(let gi=maxG-1;gi>=0;gi--)place(byGen[gi],byGen[gi].map(u=>upKey(u)??u.x));
   let x0=Infinity,x1=-Infinity;for(const v of X.values()){x0=Math.min(x0,v);x1=Math.max(x1,v)}if(!X.size){x0=x1=0}
-  const W=Math.max((x1-x0)+SP*1.7,TAU*240),R0=W/TAU,mid=(x0+x1)/2;
+  const mid=(x0+x1)/2,span=(x1-x0)+SP*1.2;
+  // radial: space people by distance along their ring (not by angle), so a family only takes the room it needs.
+  // Small trees form a fan; the circle only closes as the family grows.
+  const R0MIN=150,MINARC=SP*0.82,gapMin=[];
+  for(let gi=0;gi<=maxG;gi++){const xs=byGen[gi].flatMap(u=>u.mem.map(m=>X.get(m))).sort((a,b)=>a-b);let d=Infinity;for(let i=1;i<xs.length;i++)d=Math.min(d,xs[i]-xs[i-1]);gapMin[gi]=d}
+  let ringR=[],sc=1/(R0MIN+maxG*RING);
+  for(let it=0;it<4;it++){if(sc*span>TAU*.94)sc=TAU*.94/span;ringR=[];
+    for(let gi=0;gi<=maxG;gi++){const need=isFinite(gapMin[gi])?MINARC/(sc*gapMin[gi]):0;ringR[gi]=Math.max(gi?ringR[gi-1]+RING:R0MIN,need)}
+    const ns=1/ringR[maxG];if(Math.abs(ns-sc)<1e-6)break;sc=Math.max(ns,sc*0.85)}
+  const R0=ringR[0];
   const tree=new Map(),radial=new Map();
   for(const p of list){const x=X.get(p.id),gg=g.get(p.id);tree.set(p.id,{x:x-mid,y:(gg-maxG/2)*ROW});
-    const a=-Math.PI/2+(x-mid)/W*TAU,r=R0+gg*RING;radial.set(p.id,{x:r*Math.cos(a),y:r*Math.sin(a),a,r})}
+    const a=-Math.PI/2+(x-mid)*sc,r=ringR[gg];radial.set(p.id,{x:r*Math.cos(a),y:r*Math.sin(a),a,r})}
   // single generation-0 couple/person: pull into a tighter center feel
   const groups=new Map();for(const p of list){const ps=p.parents.filter(has).sort();if(!ps.length)continue;const k=ps.join('|');if(!groups.has(k))groups.set(k,{parents:ps,kids:[]});groups.get(k).kids.push(p.id)}
   const pairs=[];for(const[a,s]of par)for(const b of s)if(a<b)pairs.push([a,b]);
@@ -307,7 +316,7 @@ function derive(){
   for(const p of list){const own=(adultOf.get(p.id)||[])[0],birth=hh.get(birthKey(p.id)),main=own||birth;color.set(p.id,main?hcol(main):NEUTRAL);if(birth&&main!==birth)ring.set(p.id,hcol(birth))}
   // birthdays
   const bd=new Map(),soon=new Set();for(const p of list){const b=bdInfo(p);if(b){bd.set(p.id,b);if(!p.dead&&((b.next&&b.next.days<=14)||(b.heb?.next&&b.heb.next.days<=14)))soon.add(p.id)}}
-  K={...K,gen:g,maxG,tree,radial,groups,pairs,color,ring,hhColor,R0,bd,soon,count:list.length};
+  K={...K,gen:g,maxG,tree,radial,groups,pairs,color,ring,hhColor,R0,ringR,bd,soon,count:list.length};
   computeHL();
   $('#bdayDot').style.display=[...soon].some(id=>K.bd.get(id)?.next?.days<=7)?'block':'none';
 }
@@ -333,7 +342,6 @@ const nodeR=id=>(K.gen.get(id)===0||id===S.meId)?KR:NR;
 function visOff(){const sh=$('#sheet');const open=sh.classList.contains('open');if(!open)return{ox:0,oy:0,aw:vw,ah:vh-64};if(isMobile()){const h=sh.offsetHeight;return{ox:0,oy:(64-h)/2,aw:vw,ah:vh-64-h}}return{ox:-186,oy:32,aw:vw-372,ah:vh-64}}
 function setCamTarget(to,dur=650){camAnim={from:{...cam},to,t0:performance.now(),dur};req()}
 function fitView(anim=true){const L=curLayout();let to={x:0,y:0,s:.8};if(L.size){let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;for(const v of L.values()){x0=Math.min(x0,v.x);y0=Math.min(y0,v.y);x1=Math.max(x1,v.x);y1=Math.max(y1,v.y)}
-    if(S.mode==='radial'){const r=Math.max(Math.abs(x0),Math.abs(x1),Math.abs(y0),Math.abs(y1));x0=Math.min(x0,-90);x1=Math.max(x1,90);y0=Math.min(y0,-90);y1=Math.max(y1,90)}
     const pad=70,o=visOff();const s=clamp(Math.min(o.aw/(x1-x0+pad*2),o.ah/(y1-y0+pad*2+30)),.05,1.25);to={x:(x0+x1)/2-o.ox/s,y:(y0+y1)/2+12-o.oy/s,s}}
   if(anim)setCamTarget(to);else{Object.assign(cam,to);req()}}
 function flyTo(id,minS=.85){const p=curLayout().get(id);if(!p)return;const o=visOff();const s=Math.max(cam.s,minS);setCamTarget({x:p.x-o.ox/s,y:p.y-o.oy/s,s})}
@@ -379,9 +387,9 @@ function draw(ts){
 }
 function drawGuides(w,P){const c=ctx,s=cam.s;if(!K.count)return;
   if(w>0){c.globalAlpha=w;
-    for(let g=0;g<=K.maxG;g++){const r=K.R0+g*RING;c.beginPath();c.arc(0,0,r,0,TAU);c.strokeStyle='rgba(150,120,70,.16)';c.lineWidth=Math.max(1.4,1/s);c.stroke();
-      c.beginPath();c.arc(0,0,r+RING/2,0,TAU);c.strokeStyle='rgba(150,120,70,.05)';c.lineWidth=Math.max(1,1/s);c.setLineDash([6,10]);c.stroke();c.setLineDash([]);
-      const fs=Math.max(15,10/s);c.font=`600 ${fs}px Cinzel`;c.fillStyle='rgba(216,183,106,.35)';c.textAlign='center';c.textBaseline='middle';c.fillText(ROMAN[g]||g+1,0,-r-RING/2+4)}
+    for(let g=0;g<=K.maxG;g++){const r=K.ringR[g]||K.R0+g*RING,rn=K.ringR[g+1]||r+RING;c.beginPath();c.arc(0,0,r,0,TAU);c.strokeStyle='rgba(150,120,70,.16)';c.lineWidth=Math.max(1.4,1/s);c.stroke();
+      c.beginPath();c.arc(0,0,(r+rn)/2,0,TAU);c.strokeStyle='rgba(150,120,70,.05)';c.lineWidth=Math.max(1,1/s);c.setLineDash([6,10]);c.stroke();c.setLineDash([]);
+      const fs=Math.max(15,10/s);c.font=`600 ${fs}px Cinzel`;c.fillStyle='rgba(216,183,106,.35)';c.textAlign='center';c.textBaseline='middle';c.fillText(ROMAN[g]||g+1,0,r+fs*0.9)}
     // centre emblem
     c.save();const er=Math.min(84,K.R0*.36);
     c.beginPath();c.arc(0,0,er,0,TAU);const eg=c.createRadialGradient(0,0,0,0,0,er);eg.addColorStop(0,'#2a1f12');eg.addColorStop(1,'#0e0a07');c.fillStyle=eg;c.fill();
@@ -882,7 +890,7 @@ async function finishImport(){const E=IMP.entries.filter(e=>e.include);const ch=
   toast(`Added ${added}, updated ${updated}${skipped?` · ${skipped} link${skipped>1?'s':''} skipped (would clash)`:''}`,3500)}
 
 /* ---------- persistence: local first, Firebase mirror ---------- */
-const APP={title:'Family Constellation',key:'familytree-v1',dbPath:'familytree/main',build:'Build 3 · 22 Nov 2026',adminHash:'8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92',
+const APP={title:'Family Constellation',key:'familytree-v1',dbPath:'familytree/main',build:'Build 4 · 22 Nov 2026',adminHash:'8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92',
   links:[{label:'Stored data',url:'https://console.firebase.google.com/project/shopping-eb9b3/database/shopping-eb9b3-default-rtdb/data/~2Ffamilytree~2Fmain'},
     {label:'Firebase rules',url:'https://console.firebase.google.com/project/shopping-eb9b3/database/shopping-eb9b3-default-rtdb/rules'},
     {label:'GitHub repository',url:'https://github.com/Eli-Meyer42/FamilyTree'},
