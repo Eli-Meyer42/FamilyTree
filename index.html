@@ -594,11 +594,12 @@ function confirmBox(title,msg,ok,danger){return new Promise(res=>{openModal(`<h3
   dlg.onclick=e=>{const b=e.target.closest('[data-v]');if(b){closeModal();res(b.dataset.v==='1')}}})}
 function showText(t){openModal(`<h3>Your backup</h3><p class="hint">Select all and copy it somewhere safe.</p><textarea readonly>${esc(t)}</textarea><div class="row"><button class="btn" data-v>Done</button></div>`);dlg.onclick=e=>{if(e.target.closest('[data-v]'))closeModal()};const ta=dlg.querySelector('textarea');ta.focus();ta.select()}
 function importDlg(){openModal(`<h3>Restore from backup</h3><p class="hint">Choose a backup file, or paste a backup you copied. People with the same ID are updated; everyone else is kept.</p>
-  <label class="addmid" style="display:block;cursor:pointer;margin-top:10px">＋ Choose backup file<input type="file" id="impF" accept=".json,application/json" style="display:none"></label>
+  <label class="addmid" style="display:block;cursor:pointer;margin-top:10px">＋ Choose backup file<input type="file" id="impF" style="display:none"></label>
+  <div id="rsMsg" class="hint" style="color:var(--gold2)"></div>
   <label class="f">Or paste it</label><textarea id="impT" placeholder='{"people":[…]}'></textarea><div class="row"><button class="btn ghost" data-v="0">Cancel</button><button class="btn" data-v="1">Restore</button></div>`);
-  $('#impF').onchange=async e=>{const f=e.target.files[0];if(!f)return;$('#impT').value=await f.text();toast('File loaded — tap Restore')};
-  dlg.onclick=async e=>{const b=e.target.closest('[data-v]');if(!b)return;if(b.dataset.v==='0')return closeModal();let d;try{d=JSON.parse($('#impT').value)}catch(err){return toast('That doesn’t look like a backup')}
-    const arr=Array.isArray(d)?d:d.people;if(!Array.isArray(arr))return toast('No people found in that backup');const ch=new Map();for(const o of arr.slice(0,3000))if(o&&okId(o.id))ch.set(o.id,norm(o,o.id));closeModal();
+  $('#impF').onchange=async e=>{const f=e.target.files[0];if(!f)return;const t=await f.text();$('#impT').value=t;$('#rsMsg').textContent=/^\s*[\[{]/.test(t)?`Loaded ${f.name} — tap Restore`:`${f.name} doesn’t look like a backup file.`};
+  dlg.onclick=async e=>{const b=e.target.closest('[data-v]');if(!b)return;if(b.dataset.v==='0')return closeModal();const msg=t=>{$('#rsMsg').textContent=t};if(S.readOnly)return msg('Unlock editing first: ☰ → Editing → enter the family code.');let d;try{d=JSON.parse($('#impT').value)}catch(err){return msg('That doesn’t look like a backup — choose the .json file or paste its contents.')}
+    const arr=Array.isArray(d)?d:Array.isArray(d.people)?d.people:d.people&&typeof d.people==='object'?Object.entries(d.people).map(([id,o])=>({...o,id})):null;if(!arr||!arr.length)return msg('No people found in that backup.');const ch=new Map();for(const o of arr.slice(0,3000))if(o&&okId(o.id))ch.set(o.id,norm(o,o.id));closeModal();
     if(d.familyName&&typeof d.familyName==='string'){S.familyName=d.familyName.slice(0,40)}await commit(ch);log('restore',ch.size+' people');toast(`Restored ${ch.size} people`);fitView()}}
 
 /* ---------- add / edit form ---------- */
@@ -778,20 +779,21 @@ function importDlgFamily(){IMP.files=[];const ai=!!DB.sample;
   $('#impGo').onclick=readImport}
 async function readImport(){const btn=$('#impGo'),st=$('#impStatus');IMP.text=$('#impText').value;
   if(btn.dataset.busy){IMP.ctl?.abort();return}
-  let free=IMP.text.trim();const images=[];let entries=[],tag=0;
+  let free=IMP.text.trim();const images=[];let entries=[],tag=0;st.textContent='';
+  if(!free&&!IMP.files.length){st.textContent='Paste some text or choose a file first.';return}
   for(const f of IMP.files){const n=f.name.toLowerCase();
     try{if(f.type.startsWith('image/')){images.push(f);continue}
       if(/\.(xlsx|xls)$/.test(n)){st.textContent='Opening spreadsheet…';const X=await loadXLSX();const wb=X.read(await f.arrayBuffer(),{cellDates:false});
         for(const sn of wb.SheetNames){const rows=X.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:false,dateNF:'yyyy-mm-dd',defval:''}).map(r=>r.map(String));const t=tableEntries(rows,'t'+(tag++)+'_');if(t)entries.push(...t);else free+='\n\n'+rows.map(r=>r.join(', ')).join('\n')}continue}
       const text=await f.text();
-      if(n.endsWith('.json')){const d=JSON.parse(text);const arr=Array.isArray(d)?d:d.people;if(Array.isArray(arr)){arr.forEach((o,i)=>{if(!o||!okId(o.id))return;const p=norm(o,o.id);entries.push({ref:'@'+p.id,include:true,match:has(p.id)?p.id:'',d:p,links:[...p.parents.map(x=>({type:'childOf',to:'@'+x})),...p.partners.map(x=>({type:'partnerOf',to:'@'+x}))],note:''})});
+      if(n.endsWith('.json')||/^\s*[\[{]/.test(text)){let d;try{d=JSON.parse(text)}catch(err){st.textContent=`${f.name} looks like a backup but is damaged or incomplete.`;continue}const arr=Array.isArray(d)?d:d.people;if(Array.isArray(arr)){arr.forEach((o,i)=>{if(!o||!okId(o.id))return;const p=norm(o,o.id);entries.push({ref:'@'+p.id,keepId:true,include:true,match:has(p.id)?p.id:'',d:p,links:[...p.parents.map(x=>({type:'childOf',to:'@'+x})),...p.partners.map(x=>({type:'partnerOf',to:'@'+x}))],note:''})});
           entries.forEach(e=>e.links=e.links.filter(l=>entries.some(x=>x.ref===l.to)||has(l.to.slice(1))).map(l=>entries.some(x=>x.ref===l.to)?l:{...l,to:l.to.slice(1)}));continue}}
       const t=/\.(csv|tsv)$/.test(n)||/\t|,/.test(text.split('\n')[0])?tableEntries(parseCSV(text),'t'+(tag++)+'_'):null;if(t)entries.push(...t);else free+='\n\n'+text}
-    catch(err){toast(`Couldn’t read ${f.name}`)}}
+    catch(err){st.textContent=`Couldn’t read ${f.name}.`;log('import-err',f.name+': '+(err&&err.message))}}
   // pasted text might itself be a table
   if(free&&!images.length){const t=tableEntries(parseCSV(free),'p');if(t&&t.length){entries.push(...t);free=''}}
   resolveNames(entries);
-  if((free||images.length)&&!DB.sample){if(!entries.length){st.textContent='';return toast('Paste a spreadsheet with column headers (First, Last, Birthday…)',3500)}toast('Only the spreadsheet rows could be read here',3000);free='';images.length=0}
+  if((free||images.length)&&!DB.sample){if(!entries.length){st.textContent='Couldn’t find any people in that. Use the spreadsheet template (with column headers), or a backup file — backups load best through ☰ → Restore…';return}toast('Only the spreadsheet rows could be read here',3000);free='';images.length=0}
   if(free||images.length){btn.dataset.busy='1';btn.textContent='Stop';st.textContent='Claude is reading… this can take up to a minute.';IMP.ctl=new AbortController();
     try{const lim=await DB.sample.limits().catch(()=>null);const imgs=lim?.images?images.slice(0,lim.images.maxCount):[];if(images.length&&!imgs.length)toast('Screenshots can’t be read here — skipping them');else if(imgs.length<images.length)toast(`Only the first ${imgs.length} screenshots will be read`);
       if(!free&&!imgs.length)throw{code:'nothing'};
@@ -801,7 +803,7 @@ async function readImport(){const btn=$('#impGo'),st=$('#impStatus');IMP.text=$(
       const m={not_granted:'Claude wasn’t allowed to read it — you can still import a spreadsheet.',rate_limited:'Claude is busy right now — try again in a bit.',refused:'Claude couldn’t read that text.',invalid_json:'Claude’s answer came back garbled — try again, or paste less at once.',prompt_too_large:'That’s too much at once — try half.',image_rejected:'One of the screenshots couldn’t be read.'};
       st.textContent=m[e?.code]||(e?.code==='nothing'?'':'Something went wrong reading that — try again.');if(!entries.length)return}
     btn.dataset.busy='';btn.textContent='Read it'}
-  if(!entries.length){st.textContent='';return toast('Didn’t find anyone in that — try adding more detail',3000)}
+  if(!entries.length){if(!st.textContent)st.textContent='Didn’t find anyone in that — try adding more detail.';return}
   entries.forEach(checkHebDate);
   IMP.entries=entries;st.textContent='';renderImp()}
 function aiPrompt(text,nImg,already){const ex=[...S.people.values()].slice(0,500).map(p=>`${p.id} | ${fullName(p)} | ${p.nick||''} | ${p.gender||''} | ${p.birth||''} | parents: ${parentsOf(p.id).map(x=>fullName(P_(x))).join(' & ')||'-'} | partners: ${partnersOf(p.id).map(x=>fullName(P_(x))).join(', ')||'-'}`).join('\n');
@@ -866,7 +868,7 @@ function renderImp(){const E=IMP.entries,n=E.filter(e=>e.include).length;const p
     else if(a==='link'){const to=box.querySelector('[data-a=lto]').value,ty=box.querySelector('[data-a=lt]').value;if(!to)return toast('Pick who to connect to');if(!en.links.some(l=>l.type===ty&&l.to===to))en.links.push({type:ty,to});renderImp()}}}
 async function finishImport(){const E=IMP.entries.filter(e=>e.include);const ch=new Map(),idOf=new Map();let added=0,updated=0,skipped=0;
   const mut=id=>{if(!ch.has(id))ch.set(id,clone(P_(id)));return ch.get(id)};const now=Date.now();
-  E.forEach((e,i)=>idOf.set(e.ref,e.match&&has(e.match)?e.match:uid()+i));
+  E.forEach((e,i)=>{const orig=e.ref.slice(1);idOf.set(e.ref,e.match&&has(e.match)?e.match:e.keepId&&okId(orig)&&!has(orig)?orig:uid()+i)});
   E.forEach((e,i)=>{const id=idOf.get(e.ref),d=e.d;
     if(has(id)){const p=mut(id);for(const k of['first','last','nick','maiden','hebName','gender','birth','place','death'])if(d[k])p[k]=d[k];if(d.middle.length)p.middle=d.middle.slice();if(d.dead)p.dead=true;if(d.afterSunset)p.afterSunset=true;if(d.notes&&!(p.notes||'').includes(d.notes))p.notes=[p.notes,d.notes].filter(Boolean).join('\n').slice(0,1000);updated++}
     else{ch.set(id,norm({...d,parents:[],partners:[],created:now+i},id));added++}});
@@ -880,7 +882,7 @@ async function finishImport(){const E=IMP.entries.filter(e=>e.include);const ch=
   toast(`Added ${added}, updated ${updated}${skipped?` · ${skipped} link${skipped>1?'s':''} skipped (would clash)`:''}`,3500)}
 
 /* ---------- persistence: local first, Firebase mirror ---------- */
-const APP={title:'Family Constellation',key:'familytree-v1',dbPath:'familytree/main',build:'Build 2 · 22 Nov 2026',adminHash:'8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92',
+const APP={title:'Family Constellation',key:'familytree-v1',dbPath:'familytree/main',build:'Build 3 · 22 Nov 2026',adminHash:'8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92',
   links:[{label:'Stored data',url:'https://console.firebase.google.com/project/shopping-eb9b3/database/shopping-eb9b3-default-rtdb/data/~2Ffamilytree~2Fmain'},
     {label:'Firebase rules',url:'https://console.firebase.google.com/project/shopping-eb9b3/database/shopping-eb9b3-default-rtdb/rules'},
     {label:'GitHub repository',url:'https://github.com/Eli-Meyer42/FamilyTree'},
