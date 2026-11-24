@@ -191,7 +191,7 @@ function bdInfo(p){const b=parseD(p.birth);if(!b)return null;const o={b};if(p.de
 /* ---------- data normalize ---------- */
 const okId=v=>typeof v==='string'&&/^[A-Za-z0-9_-]{1,60}$/.test(v);
 function norm(o,id){o=o&&typeof o==='object'?o:{};const s=(v,n)=>typeof v==='string'?v.slice(0,n):'';const arr=v=>Array.isArray(v)?[...new Set(v.filter(okId))]:[];const date=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)?v:'';
-  return{id,first:s(o.first,60),middle:Array.isArray(o.middle)?o.middle.filter(x=>typeof x==='string'&&x.trim()).map(x=>x.slice(0,60)).slice(0,6):[],last:s(o.last,60),nick:s(o.nick,60),maiden:s(o.maiden,60),hebName:s(o.hebName,80),gender:['m','f','x'].includes(o.gender)?o.gender:'',birth:date(o.birth),afterSunset:!!o.afterSunset,dead:!!o.dead,death:date(o.death),place:s(o.place,120),notes:s(o.notes,1000),parents:arr(o.parents).filter(x=>x!==id).slice(0,2),partners:arr(o.partners).filter(x=>x!==id).slice(0,12),created:typeof o.created==='number'?o.created:0}}
+  return{id,first:s(o.first,60),middle:Array.isArray(o.middle)?o.middle.filter(x=>typeof x==='string'&&x.trim()).map(x=>x.slice(0,60)).slice(0,6):[],last:s(o.last,60),nick:s(o.nick,60),maiden:s(o.maiden,60),hebName:s(o.hebName,80),gender:['m','f','x'].includes(o.gender)?o.gender:'',birth:date(o.birth),afterSunset:!!o.afterSunset,halo:!!o.halo,dead:!!o.dead,death:date(o.death),place:s(o.place,120),notes:s(o.notes,1000),parents:arr(o.parents).filter(x=>x!==id).slice(0,2),partners:arr(o.partners).filter(x=>x!==id).slice(0,12),created:typeof o.created==='number'?o.created:0}}
 const clone=p=>JSON.parse(JSON.stringify(p));
 
 /* ---------- graph helpers ---------- */
@@ -319,7 +319,7 @@ function derive(){
   for(const p of list){const own=(adultOf.get(p.id)||[])[0],birth=hh.get(birthKey(p.id)),main=own||birth;color.set(p.id,main?hcol(main):NEUTRAL);if(birth&&main!==birth)ring.set(p.id,hcol(birth))}
   // birthdays
   const bd=new Map(),soon=new Set();for(const p of list){const b=bdInfo(p);if(b){bd.set(p.id,b);if(!p.dead&&((b.next&&b.next.days<=14)||(b.heb?.next&&b.heb.next.days<=14)))soon.add(p.id)}}
-  K={...K,gen:g,maxG,tree,radial,groups,pairs,color,ring,hhColor,R0,ringR,fan:[fanA0,fanA1],bd,soon,count:list.length};
+  K={...K,gen:g,maxG,tree,radial,groups,pairs,color,ring,hhColor,R0,ringR,fan:[fanA0,fanA1],halo:list.some(p=>p.halo),bd,soon,count:list.length};
   computeHL();
   $('#bdayDot').style.display=[...soon].some(id=>K.bd.get(id)?.next?.days<=7)?'block':'none';
 }
@@ -365,7 +365,7 @@ function frame(ts){raf=null;
   if(camAnim){const t=clamp((ts-camAnim.t0)/camAnim.dur,0,1),e=ease(t);cam.x=camAnim.from.x+(camAnim.to.x-camAnim.from.x)*e;cam.y=camAnim.from.y+(camAnim.to.y-camAnim.from.y)*e;
     const ls=Math.log(camAnim.from.s)+(Math.log(camAnim.to.s)-Math.log(camAnim.from.s))*e;cam.s=Math.exp(ls);if(t>=1)camAnim=null}
   draw(ts);
-  if(camAnim||S.trans)req();else if(K.soon.size){clearTimeout(lastPulse);lastPulse=setTimeout(req,60)}}
+  if(camAnim||S.trans)req();else if(K.soon.size||K.halo){clearTimeout(lastPulse);lastPulse=setTimeout(req,60)}}
 const rgba=(c,a)=>`rgba(${c[0]},${c[1]},${c[2]},${a})`;
 const mix=(a,b,t)=>a.map((v,i)=>Math.round(v+(b[i]-v)*t));
 const BRONZE=[176,140,76];
@@ -442,6 +442,10 @@ function drawEdges(w,P,hl,dim){const c=ctx,s=cam.s,E=edgePaths(w,P);c.lineCap='r
 function drawNode(id,p,dim,pulse){const c=ctx,s=cam.s,pr=P_(id),r=nodeR(id),col=K.color.get(id)||NEUTRAL,sel=id===S.sel,hi=K.hl.nodes.has(id),key=K.gen.get(id)===0||id===S.meId;
   const sr=r*s;c.save();c.translate(p.x,p.y);if(dim)c.globalAlpha=.42;
   if(sr<5){c.beginPath();c.arc(0,0,Math.max(r,3/s),0,TAU);c.fillStyle=pr.dead?'#8e8a80':rgba(mix(col,[240,210,140],.35),1);if(sel||hi){c.shadowColor='#ffd27a';c.shadowBlur=12}c.fill();c.restore();return}
+  if(pr.halo){const t=performance.now()/9000;c.save();const hg=c.createRadialGradient(0,0,r*.9,0,0,r+30);hg.addColorStop(0,'rgba(255,236,190,.32)');hg.addColorStop(.6,'rgba(255,214,140,.12)');hg.addColorStop(1,'rgba(255,214,140,0)');c.fillStyle=hg;c.beginPath();c.arc(0,0,r+30,0,TAU);c.fill();
+    c.beginPath();c.arc(0,0,r+16,0,TAU);c.strokeStyle='rgba(255,238,200,.55)';c.lineWidth=1.2;c.stroke();
+    for(let i=0;i<10;i++){const a=t*TAU+i/10*TAU,R=r+16,x=Math.cos(a)*R,y=Math.sin(a)*R,k=i%2?2.6:4.2;c.beginPath();for(let j=0;j<8;j++){const aa=j/8*TAU,rr=j%2?k*.38:k;c.lineTo(x+Math.cos(aa)*rr,y+Math.sin(aa)*rr)}c.closePath();c.fillStyle='rgba(255,244,214,.95)';c.shadowColor='rgba(255,220,150,.9)';c.shadowBlur=8;c.fill()}
+    c.restore()}
   if(K.soon.has(id)&&!dim){c.beginPath();c.arc(0,0,r+12+pulse*5,0,TAU);c.strokeStyle=`rgba(255,170,90,${.25+pulse*.45})`;c.lineWidth=3;c.stroke()}
   if(sel||hi||id===S.hover){c.shadowColor=sel?'rgba(255,214,120,.95)':'rgba(255,196,96,.6)';c.shadowBlur=sel?30:16}
   c.beginPath();c.arc(0,0,r+5,0,TAU);c.fillStyle=frameGrad(r,pr.dead);c.fill();c.shadowBlur=0;
@@ -644,6 +648,7 @@ function openForm(cfg){const edit=cfg.kind==='edit',a=cfg.anchor?P_(cfg.anchor):
      <label class="f">Gender</label><div class="seg" id="fG"><button type="button" data-g="m" class="${g==='m'?'on':''}">Male</button><button type="button" data-g="f" class="${g==='f'?'on':''}">Female</button><button type="button" data-g="x" class="${g==='x'?'on':''}">Other</button></div>
      <label class="f">Birthday</label>${dateField('birth',p.birth)}
      ${HEB?`<label class="ck"><input type="checkbox" id="fSun" ${p.afterSunset?'checked':''}> Born after sunset <span class="hint" style="margin:0">(Hebrew date)</span></label>`:''}
+     <label class="ck"><input type="checkbox" id="fHalo" ${p.halo?'checked':''}> Soft halo <span class="hint" style="margin:0">(decoration only)</span></label>
      <label class="ck"><input type="checkbox" id="fDead" ${p.dead?'checked':''}> Has passed away</label>
      <div id="deathBox" style="display:${p.dead?'block':'none'}"><label class="f">Date of passing</label>${dateField('death',p.death)}</div>
      <label class="f">Birthplace</label><input id="fPlace" value="${esc(p.place)}" maxlength="120">
@@ -665,7 +670,7 @@ function openForm(cfg){const edit=cfg.kind==='edit',a=cfg.anchor?P_(cfg.anchor):
   if(!isMobile())setTimeout(()=>$('#fFirst')?.focus(),30);
   $('#pf').onsubmit=async e=>{e.preventDefault();
     const birth=readDate('birth'),death=$('#fDead').checked?readDate('death'):'';
-    const fields={first:$('#fFirst').value.trim(),middle:[...mids.querySelectorAll('input')].map(i=>i.value.trim()).filter(Boolean),last:$('#fLast').value.trim(),nick:$('#fNick').value.trim(),maiden:$('#fMaiden').value.trim(),hebName:$('#fHeb').value.trim(),gender,birth,afterSunset:!!$('#fSun')?.checked,dead:$('#fDead').checked,death,place:$('#fPlace').value.trim(),notes:$('#fNotes').value.trim()};
+    const fields={first:$('#fFirst').value.trim(),middle:[...mids.querySelectorAll('input')].map(i=>i.value.trim()).filter(Boolean),last:$('#fLast').value.trim(),nick:$('#fNick').value.trim(),maiden:$('#fMaiden').value.trim(),hebName:$('#fHeb').value.trim(),gender,birth,afterSunset:!!$('#fSun')?.checked,halo:$('#fHalo').checked,dead:$('#fDead').checked,death,place:$('#fPlace').value.trim(),notes:$('#fNotes').value.trim()};
     if(!useEx&&!fields.first){$('#fFirst').focus();return toast('Add at least a first name')}
     if(!useEx&&birth===null)return toast('Birthday needs a month, day and 4-digit year');
     if(!useEx&&death===null)return toast('Date of passing needs a month, day and 4-digit year');
@@ -747,16 +752,17 @@ function checkHebDate(e){e.hebCheck=null;if(!e.hebDate||!HEB)return;const g=pars
 function parseCSV(text){const delim=(text.split('\n')[0].match(/\t/g)||[]).length>(text.split('\n')[0].match(/,/g)||[]).length?'\t':',';const rows=[];let row=[],f='',q=false;
   for(let i=0;i<text.length;i++){const c=text[i];if(q){if(c==='"'){if(text[i+1]==='"'){f+='"';i++}else q=false}else f+=c}else if(c==='"')q=true;else if(c===delim){row.push(f);f=''}else if(c==='\n'||c==='\r'){if(c==='\r'&&text[i+1]==='\n')i++;row.push(f);rows.push(row);row=[];f=''}else f+=c}
   if(f||row.length){row.push(f);rows.push(row)}return rows.filter(r=>r.some(x=>x.trim()))}
-const HMAP={first:'first',firstname:'first',given:'first',givenname:'first',middle:'middle',middlename:'middle',middlenames:'middle',last:'last',lastname:'last',surname:'last',familyname:'last',name:'name',fullname:'name',nickname:'nick',nick:'nick',goesby:'nick',maidenname:'maiden',maiden:'maiden',nee:'maiden',birthsurname:'maiden',hebrewname:'hebName',hebname:'hebName',hebrewdate:'hebDate',hebrewbirthday:'hebDate',hebrewbirthdate:'hebDate',hebdate:'hebDate',dayborn:'bd',monthborn:'bm',yearborn:'by',birthday:'birth',birthdate:'birth',dateofbirth:'birth',dob:'birth',born:'birth',bornaftersunset:'sunset',aftersunset:'sunset',gender:'gender',sex:'gender',parent1:'par',parent2:'par',parent:'par',parents:'pars',father:'par',dad:'par',mother:'par',mom:'par',partner:'partner',spouse:'partner',husband:'partner',wife:'partner',birthplace:'place',placeofbirth:'place',from:'place',deceased:'dead',passedaway:'dead',died:'deathAny',dateofpassing:'death',dateofdeath:'death',deathdate:'death',notes:'notes',note:'notes'};
+const HMAP={first:'first',firstname:'first',given:'first',givenname:'first',middle:'middle',middlename:'middle',middlenames:'middle',last:'last',lastname:'last',surname:'last',familyname:'last',name:'name',fullname:'name',nickname:'nick',nick:'nick',goesby:'nick',maidenname:'maiden',maiden:'maiden',nee:'maiden',birthsurname:'maiden',hebrewname:'hebName',hebname:'hebName',hebrewdate:'hebDate',hebrewbirthday:'hebDate',hebrewbirthdate:'hebDate',hebdate:'hebDate',dayborn:'bd',monthborn:'bm',yearborn:'by',birthday:'birth',birthdate:'birth',dateofbirth:'birth',dob:'birth',born:'birth',bornaftersunset:'sunset',aftersunset:'sunset',gender:'gender',sex:'gender',parent1:'par',parent2:'par',parent:'par',parents:'pars',father:'par',dad:'par',mother:'par',mom:'par',partner:'partner',spouse:'partner',husband:'partner',wife:'partner',birthplace:'place',placeofbirth:'place',from:'place',deceased:'dead',passedaway:'dead',died:'deathAny',dateofpassing:'death',dateofdeath:'death',deathdate:'death',notes:'notes',note:'notes',halo:'halo'};
 function tableEntries(rows,tag){if(rows.length<2)return null;const heads=rows[0].map(h=>HMAP[h.toLowerCase().replace(/[^a-z0-9]/g,'')]||null);if(!heads.includes('first')&&!heads.includes('name'))return null;
   const yes=v=>/^(y|yes|true|1|x|✓)$/i.test(String(v).trim());const out=[];
-  rows.slice(1).forEach((r,ri)=>{if(/^\s*example/i.test(String(r[0]??'')))return;const e={ref:`@${tag}${ri}`,include:true,match:'',d:{first:'',middle:[],last:'',nick:'',gender:'',birth:'',afterSunset:false,dead:false,death:'',place:'',notes:''},links:[],names:{par:[],partner:[]},note:''};
+  rows.slice(1).forEach((r,ri)=>{if(/^\s*(example|▸|#)/i.test(String(r[0]??'')))return;const e={ref:`@${tag}${ri}`,include:true,match:'',d:{first:'',middle:[],last:'',nick:'',gender:'',birth:'',afterSunset:false,dead:false,death:'',place:'',notes:''},links:[],names:{par:[],partner:[]},note:''};
     heads.forEach((h,i)=>{const v=String(r[i]??'').trim();if(!h||!v)return;
       if(h==='name'){const parts=v.split(/\s+/);e.d.first=parts[0];if(parts.length>1)e.d.last=parts[parts.length-1];e.d.middle=parts.slice(1,-1)}
       else if(h==='middle')e.d.middle=v.split(/\s+/);else if(h==='birth'){e.d.birth=looseDate(v);if(!e.d.birth)e.note=`Couldn’t read birthday “${v}”`}
       else if(h==='sunset')e.d.afterSunset=yes(v);else if(h==='gender')e.d.gender=/^m/i.test(v)?'m':/^f/i.test(v)?'f':'';
       else if(h==='dead')e.d.dead=yes(v)||!!looseDate(v);else if(h==='death'){e.d.death=looseDate(v);e.d.dead=true}else if(h==='deathAny'){const d=looseDate(v);if(d){e.d.death=d;e.d.dead=true}else e.d.dead=yes(v)}
       else if(h==='hebDate')e.hebDate=v;
+      else if(h==='halo')e.d.halo=yes(v);
       else if(h==='bd'||h==='bm'||h==='by')(e.parts||(e.parts={}))[h]=v;
       else if(h==='par')e.names.par.push(v);else if(h==='pars')e.names.par.push(...v.split(/\s*(?:&|,|\band\b)\s*/i).filter(Boolean));else if(h==='partner')e.names.partner.push(v);else e.d[h]=v});
     if(e.parts){const{bd,bm,by}=e.parts;delete e.parts;const mo=/^\d+$/.test(bm||'')?+bm:MONTHS.findIndex(n=>n.toLowerCase().startsWith(String(bm||'').trim().toLowerCase().slice(0,3)))+1;
@@ -797,7 +803,7 @@ async function readImport(){const btn=$('#impGo'),st=$('#impStatus');IMP.text=$(
   for(const f of IMP.files){const n=f.name.toLowerCase();
     try{if(f.type.startsWith('image/')){images.push(f);continue}
       if(/\.(xlsx|xls)$/.test(n)){st.textContent='Opening spreadsheet…';const X=await loadXLSX();const wb=X.read(await f.arrayBuffer(),{cellDates:false});
-        for(const sn of wb.SheetNames){const rows=X.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:false,dateNF:'yyyy-mm-dd',defval:''}).map(r=>r.map(String));const t=tableEntries(rows,'t'+(tag++)+'_');if(t)entries.push(...t);else free+='\n\n'+rows.map(r=>r.join(', ')).join('\n')}continue}
+        for(const sn of wb.SheetNames){if(/^(how to|instructions|read me)/i.test(sn))continue;const rows=X.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:false,dateNF:'yyyy-mm-dd',defval:''}).map(r=>r.map(String));const t=tableEntries(rows,'t'+(tag++)+'_');if(t)entries.push(...t);else free+='\n\n'+rows.map(r=>r.join(', ')).join('\n')}continue}
       const text=await f.text();
       if(n.endsWith('.json')||/^\s*[\[{]/.test(text)){let d;try{d=JSON.parse(text)}catch(err){st.textContent=`${f.name} looks like a backup but is damaged or incomplete.`;continue}const arr=Array.isArray(d)?d:d.people;if(Array.isArray(arr)){arr.forEach((o,i)=>{if(!o||!okId(o.id))return;const p=norm(o,o.id);entries.push({ref:'@'+p.id,keepId:true,include:true,match:has(p.id)?p.id:'',d:p,links:[...p.parents.map(x=>({type:'childOf',to:'@'+x})),...p.partners.map(x=>({type:'partnerOf',to:'@'+x}))],note:''})});
           entries.forEach(e=>e.links=e.links.filter(l=>entries.some(x=>x.ref===l.to)||has(l.to.slice(1))).map(l=>entries.some(x=>x.ref===l.to)?l:{...l,to:l.to.slice(1)}));continue}}
@@ -883,7 +889,7 @@ async function finishImport(){const E=IMP.entries.filter(e=>e.include);const ch=
   const mut=id=>{if(!ch.has(id))ch.set(id,clone(P_(id)));return ch.get(id)};const now=Date.now();
   E.forEach((e,i)=>{const orig=e.ref.slice(1);idOf.set(e.ref,e.match&&has(e.match)?e.match:e.keepId&&okId(orig)&&!has(orig)?orig:uid()+i)});
   E.forEach((e,i)=>{const id=idOf.get(e.ref),d=e.d;
-    if(has(id)){const p=mut(id);for(const k of['first','last','nick','maiden','hebName','gender','birth','place','death'])if(d[k])p[k]=d[k];if(d.middle.length)p.middle=d.middle.slice();if(d.dead)p.dead=true;if(d.afterSunset)p.afterSunset=true;if(d.notes&&!(p.notes||'').includes(d.notes))p.notes=[p.notes,d.notes].filter(Boolean).join('\n').slice(0,1000);updated++}
+    if(has(id)){const p=mut(id);for(const k of['first','last','nick','maiden','hebName','gender','birth','place','death'])if(d[k])p[k]=d[k];if(d.middle.length)p.middle=d.middle.slice();if(d.dead)p.dead=true;if(d.afterSunset)p.afterSunset=true;if(d.halo)p.halo=true;if(d.notes&&!(p.notes||'').includes(d.notes))p.notes=[p.notes,d.notes].filter(Boolean).join('\n').slice(0,1000);updated++}
     else{ch.set(id,norm({...d,parents:[],partners:[],created:now+i},id));added++}});
   const res=to=>idOf.get(to)||(has(to)?to:null);const get=id=>ch.get(id)||P_(id);
   const ancestorIn=(a,b)=>{const seen=new Set(),q=[b];while(q.length){const x=q.shift();if(x===a)return true;if(seen.has(x))continue;seen.add(x);const p=get(x);if(p)q.push(...p.parents)}return false};
@@ -895,7 +901,7 @@ async function finishImport(){const E=IMP.entries.filter(e=>e.include);const ch=
   toast(`Added ${added}, updated ${updated}${skipped?` · ${skipped} link${skipped>1?'s':''} skipped (would clash)`:''}`,3500)}
 
 /* ---------- persistence: local first, Firebase mirror ---------- */
-const APP={title:'Family Constellation',key:'familytree-v1',dbPath:'familytree/main',build:'Build 6 · 24 Nov 2026',adminHash:'8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92',
+const APP={title:'Family Constellation',key:'familytree-v1',dbPath:'familytree/main',build:'Build 7 · 24 Nov 2026',adminHash:'8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92',
   links:[{label:'Stored data',url:'https://console.firebase.google.com/project/shopping-eb9b3/database/shopping-eb9b3-default-rtdb/data/~2Ffamilytree~2Fmain'},
     {label:'Firebase rules',url:'https://console.firebase.google.com/project/shopping-eb9b3/database/shopping-eb9b3-default-rtdb/rules'},
     {label:'GitHub repository',url:'https://github.com/Eli-Meyer42/FamilyTree'},
