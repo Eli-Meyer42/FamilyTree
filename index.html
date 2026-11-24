@@ -100,6 +100,13 @@ label.f{display:block;font-size:12px;color:var(--muted);text-transform:uppercase
 .buildstamp{text-align:center;font-size:12px;color:#6f6553;margin:22px 0 2px}
 textarea{min-height:140px;font-size:12px;font-family:ui-monospace,monospace}
 .hebname{font-family:'Frank Ruhl Libre',serif;font-weight:500;font-size:21px;color:var(--gold);letter-spacing:0;margin-top:2px;text-align:left;unicode-bidi:isolate}
+.lnk{background:none;border:0;color:var(--gold);font-size:13px;padding:8px 2px 0;text-decoration:underline;text-underline-offset:3px}
+.ordrow{display:flex;align-items:center;gap:8px;border:1px solid #4f3f25;border-radius:10px;background:#120d08;padding:6px 6px 6px 10px}
+.ordrow .n{width:20px;color:var(--muted);font-size:13px;text-align:center}
+.ordrow .m{flex:1;min-width:0;font-size:15px}.ordrow .m i{display:block;font-style:normal;font-size:12px;color:var(--muted)}
+.ordrow button{width:42px;height:38px;flex:none;border-radius:9px;border:1px solid #5d4a2a;background:linear-gradient(#21180e,#120d08);color:var(--gold);font-size:14px}
+.ordrow button:disabled{opacity:.25}
+.upd{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top) + 62px);z-index:25;display:none;padding:9px 16px;border-radius:999px;border:1px solid #c9a55a;background:linear-gradient(#4a3716,#2a1e0c);color:var(--gold2);font-size:13.5px;font-weight:600;box-shadow:0 4px 18px #000c}
 .nick{font-family:Inter,sans-serif;font-weight:400;font-size:14px;color:var(--muted);letter-spacing:0;margin-top:2px}
 .dt{display:grid;grid-template-columns:1.5fr 1fr 1.1fr;gap:6px}
 .dt select,.dt input{padding:10px 8px}
@@ -134,6 +141,7 @@ textarea{min-height:140px;font-size:12px;font-family:ui-monospace,monospace}
 <div class="loading on" id="loading"><div class="card">Opening the archive…</div></div>
 <div class="toast" id="toast"></div>
 <div class="badge" id="badge"></div>
+<button class="upd" id="upd">New version ready — tap to update</button>
 
 <script src="https://www.gstatic.com/firebasejs/12.11.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.11.0/firebase-database-compat.js"></script>
@@ -191,7 +199,7 @@ function bdInfo(p){const b=parseD(p.birth);if(!b)return null;const o={b};if(p.de
 /* ---------- data normalize ---------- */
 const okId=v=>typeof v==='string'&&/^[A-Za-z0-9_-]{1,60}$/.test(v);
 function norm(o,id){o=o&&typeof o==='object'?o:{};const s=(v,n)=>typeof v==='string'?v.slice(0,n):'';const arr=v=>Array.isArray(v)?[...new Set(v.filter(okId))]:[];const date=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)?v:'';
-  return{id,first:s(o.first,60),middle:Array.isArray(o.middle)?o.middle.filter(x=>typeof x==='string'&&x.trim()).map(x=>x.slice(0,60)).slice(0,6):[],last:s(o.last,60),nick:s(o.nick,60),maiden:s(o.maiden,60),hebName:s(o.hebName,80),gender:['m','f','x'].includes(o.gender)?o.gender:'',birth:date(o.birth),afterSunset:!!o.afterSunset,halo:!!o.halo,dead:!!o.dead,death:date(o.death),place:s(o.place,120),notes:s(o.notes,1000),parents:arr(o.parents).filter(x=>x!==id).slice(0,2),partners:arr(o.partners).filter(x=>x!==id).slice(0,12),created:typeof o.created==='number'?o.created:0}}
+  return{id,first:s(o.first,60),middle:Array.isArray(o.middle)?o.middle.filter(x=>typeof x==='string'&&x.trim()).map(x=>x.slice(0,60)).slice(0,6):[],last:s(o.last,60),nick:s(o.nick,60),maiden:s(o.maiden,60),hebName:s(o.hebName,80),gender:['m','f','x'].includes(o.gender)?o.gender:'',birth:date(o.birth),afterSunset:!!o.afterSunset,halo:!!o.halo,ord:typeof o.ord==='number'&&isFinite(o.ord)?o.ord:null,dead:!!o.dead,death:date(o.death),place:s(o.place,120),notes:s(o.notes,1000),parents:arr(o.parents).filter(x=>x!==id).slice(0,2),partners:arr(o.partners).filter(x=>x!==id).slice(0,12),created:typeof o.created==='number'?o.created:0}}
 const clone=p=>JSON.parse(JSON.stringify(p));
 
 /* ---------- graph helpers ---------- */
@@ -240,19 +248,33 @@ function derive(){
   // implicit couples: co-parents become partners for layout
   for(const p of list){const ps=p.parents.filter(has);if(ps.length===2){par.get(ps[0]).add(ps[1]);par.get(ps[1]).add(ps[0])}}
   K={...K,kids,par};
-  // generations
-  const g=new Map(list.map(p=>[p.id,0]));
-  for(let it=0;it<80;it++){let ch=false;for(const p of list){let v=g.get(p.id);const ps=p.parents.filter(has);
-      if(ps.length)v=Math.max(v,Math.max(...ps.map(x=>g.get(x)))+1);
-      else{for(const q of par.get(p.id))v=Math.max(v,g.get(q));for(const c of kids.get(p.id))v=Math.max(v,g.get(c)-1)}
-      if(v!==g.get(p.id)){g.set(p.id,Math.min(v,60));ch=true}}if(!ch)break}
-  let minG=Infinity,maxG=0;for(const v of g.values()){minG=Math.min(minG,v)}for(const[k,v]of g){g.set(k,v-minG);maxG=Math.max(maxG,v-minG)}
-  if(!list.length)maxG=0;
+  // generations: partners share one and children sit one below their parents. Walking outward from each person keeps a
+  // family that marries in lined up with the couple that joins it, however far back either side is known.
+  const g=new Map();
+  for(const p of list){if(g.has(p.id))continue;const comp=[p.id];g.set(p.id,0);
+    const see=(y,v)=>{if(!g.has(y)){g.set(y,v);comp.push(y)}};
+    for(let i=0;i<comp.length;i++){const x=comp[i],gx=g.get(x);for(const y of par.get(x))see(y,gx);for(const y of P_(x).parents)if(has(y))see(y,gx-1);for(const y of kids.get(x))see(y,gx+1)}
+    let m=Infinity;for(const id of comp)m=Math.min(m,g.get(id));for(const id of comp)g.set(id,g.get(id)-m)}
+  // only matters for unusual links (say an uncle marrying a niece): never let a child sit above a parent
+  for(let it=0;it<80;it++){let ch=false;for(const p of list){let v=g.get(p.id);for(const x of p.parents)if(has(x))v=Math.max(v,g.get(x)+1);for(const y of par.get(p.id))v=Math.max(v,g.get(y));v=Math.min(v,60);if(v!==g.get(p.id)){g.set(p.id,v);ch=true}}if(!ch)break}
+  let maxG=0;for(const v of g.values())maxG=Math.max(maxG,v);
   // units (partner clusters within a generation)
   const seen=new Set(),units=[],unitOf=new Map(),byGen=Array.from({length:maxG+1},()=>[]);
   for(const p of[...list].sort((a,b)=>g.get(a.id)-g.get(b.id))){if(seen.has(p.id))continue;const gg=g.get(p.id),mem=[],q=[p.id];seen.add(p.id);
     while(q.length){const x=q.shift();mem.push(x);for(const y of par.get(x))if(!seen.has(y)&&g.get(y)===gg){seen.add(y);q.push(y)}}
     const u={id:units.length,g:gg,mem:orderChain(mem,par),x:0};units.push(u);mem.forEach(m=>unitOf.set(m,u));byGen[gg].push(u)}
+  // ---- family groups and sibling order: oldest first, by birthday when known, otherwise the saved (or entered) order
+  const PK=new Map(list.map(p=>[p.id,p.parents.filter(has).sort().join('|')]));
+  const groups=new Map();
+  for(const p of list){const k=PK.get(p.id);if(!k)continue;if(!groups.has(k))groups.set(k,{parents:k.split('|'),kids:[],ix:groups.size});groups.get(k).kids.push(p.id)}
+  const sibRank=new Map();
+  for(const gp of groups.values()){
+    const base=gp.kids.map(id=>P_(id)).sort((a,b)=>(a.ord??1e9)-(b.ord??1e9));
+    const dated=base.filter(p=>p.birth).sort((a,b)=>a.birth<b.birth?-1:a.birth>b.birth?1:0);let di=0;
+    gp.kids=base.map(p=>p.birth?dated[di++]:p).map(p=>p.id);gp.kids.forEach((id,i)=>sibRank.set(id,i))}
+  for(const arr of kids.values())arr.sort((a,b)=>groups.get(PK.get(a)).ix-groups.get(PK.get(b)).ix||sibRank.get(a)-sibRank.get(b));
+  for(const u of units){u.pk=[...new Set(u.mem.map(m=>PK.get(m)).filter(Boolean))];u.cu=new Set();for(const m of u.mem)for(const c of kids.get(m))u.cu.add(unitOf.get(c));u.leaf=!u.cu.size}
+  // ---- order within each generation: families stay together, siblings run oldest → youngest
   const X=new Map(),off=(u,i)=>(i-(u.mem.length-1)/2)*SP,width=u=>u.mem.length*SP;
   const setX=u=>u.mem.forEach((m,i)=>X.set(m,u.x+off(u,i)));
   const pack=L=>{let cur=0;L.forEach((u,i)=>{if(i)cur+=(width(L[i-1])+width(u))/2+UGAP;u.x=cur;setX(u)})};
@@ -261,45 +283,66 @@ function derive(){
   const upKey=u=>{let s=0,n=0;for(const m of u.mem)for(const c of kids.get(m))if(X.has(c)){s+=X.get(c);n++}return n?s/n:null};
   const orient=u=>{if(u.mem.length<2)return;let w=0;u.mem.forEach((m,i)=>{const pm=parMean(m);if(pm!=null)w+=(pm-u.x)*(i-(u.mem.length-1)/2)});if(w<0){u.mem.reverse();setX(u)}};
   const sortL=(L,key)=>{L.forEach((u,i)=>{const k=key(u);u._k=k==null?u.x:k;u._i=i});L.sort((a,b)=>a._k-b._k||a._i-b._i)};
+  // a couple that joins two families in the tree keeps the slot the layout gives it; everyone else sorts by age among their siblings' slots
+  const rankIn=(u,k)=>{for(const m of u.mem)if(PK.get(m)===k)return sibRank.get(m);return 0};
+  const ageOrder=L=>{const by=new Map();L.forEach((u,i)=>{if(u.pk.length!==1)return;const k=u.pk[0];if(!by.has(k))by.set(k,[]);by.get(k).push(i)});
+    for(const[k,ix]of by){if(ix.length<2)continue;const us=ix.map(i=>L[i]).sort((a,b)=>rankIn(a,k)-rankIn(b,k));ix.forEach((i,j)=>{L[i]=us[j]})}};
   pack(byGen[0]);
-  for(let gi=1;gi<=maxG;gi++){const L=byGen[gi];L.forEach((u,i)=>u.x=1e9+i);sortL(L,downKey);pack(L);L.forEach(orient)}
-  for(let it=0;it<4;it++){for(let gi=maxG-1;gi>=0;gi--){sortL(byGen[gi],upKey);pack(byGen[gi])}for(let gi=1;gi<=maxG;gi++){sortL(byGen[gi],downKey);pack(byGen[gi]);byGen[gi].forEach(orient)}}
-  // reserve room for each family's descendants so one family's kids never sit under/outside another family
-  const childUnitsOf=u=>{const s=new Set();for(const m of u.mem)for(const k of kids.get(m))s.add(unitOf.get(k));return s};
-  const blockOf=new Map();
-  for(let gi=maxG;gi>=0;gi--){const blocks=[];let cur=null;
-    for(const u of byGen[gi]){const cu=childUnitsOf(u);if(cur&&cu.size&&[...cu].some(x=>cur.kids.has(x))){cur.units.push(u);cu.forEach(x=>cur.kids.add(x))}else{cur={units:[u],kids:new Set(cu)};blocks.push(cur)}}
-    const claimed=new Set();
-    for(const B of blocks){B.own=B.units.reduce((s,u)=>s+width(u),0)+UGAP*(B.units.length-1);const cb=[];
-      for(const cu of B.kids){const b=blockOf.get(cu);if(b&&!claimed.has(b)){claimed.add(b);cb.push(b)}}
-      B.need=Math.max(B.own,cb.reduce((s,b)=>s+b.need,0)+(UGAP+24)*Math.max(0,cb.length-1));B.units.forEach(u=>blockOf.set(u,B))}}
-  const pkeyU=u=>{for(const m of u.mem){const ps=P_(m).parents.filter(has);if(ps.length)return ps.sort().join('|')}return null};
-  const leaf=u=>u.mem.every(m=>!kids.get(m).length);
-  const sep=(a,b)=>{const sib=leaf(a)&&leaf(b)&&pkeyU(a)&&pkeyU(a)===pkeyU(b);const base=(width(a)+width(b))/2+(sib?-14:UGAP),A=blockOf.get(a),B=blockOf.get(b);if(!A||A===B)return base;
-    return Math.max(base+24,(A.need+B.need)/2+UGAP+24-(A.own-width(a))/2-(B.own-width(b))/2)};
-  const place=(L,T)=>{if(!L.length)return;const c=[0];for(let i=1;i<L.length;i++)c[i]=c[i-1]+sep(L[i-1],L[i]);const st=[];
-    for(let i=0;i<L.length;i++){st.push({v:T[i]-c[i],n:1});while(st.length>1&&st[st.length-2].v>st[st.length-1].v){const b=st.pop(),a=st.pop();st.push({v:(a.v*a.n+b.v*b.n)/(a.n+b.n),n:a.n+b.n})}}
-    let i=0;for(const b of st)for(let j=0;j<b.n;j++,i++){L[i].x=b.v+c[i];setX(L[i])}};
-  const both=u=>{const a=downKey(u),b=upKey(u);return a!=null&&b!=null?(a+b)/2:a??b??u.x};
-  for(let it=0;it<16;it++){for(let gi=0;gi<=maxG;gi++)place(byGen[gi],byGen[gi].map(both));for(let gi=maxG;gi>=0;gi--)place(byGen[gi],byGen[gi].map(both))}
-  for(let gi=maxG-1;gi>=0;gi--)place(byGen[gi],byGen[gi].map(u=>upKey(u)??u.x));
-  let x0=Infinity,x1=-Infinity;for(const v of X.values()){x0=Math.min(x0,v);x1=Math.max(x1,v)}if(!X.size){x0=x1=0}
-  const mid=(x0+x1)/2,span=(x1-x0)+SP*1.2;
-  // radial: space people by distance along their ring (not by angle), so a family only takes the room it needs.
-  // Small trees form a fan; the circle only closes as the family grows.
-  const R0MIN=150,MINARC=SP*0.82,gapMin=[];
-  for(let gi=0;gi<=maxG;gi++){const xs=byGen[gi].flatMap(u=>u.mem.map(m=>X.get(m))).sort((a,b)=>a-b);let d=Infinity;for(let i=1;i<xs.length;i++)d=Math.min(d,xs[i]-xs[i-1]);gapMin[gi]=d}
-  let ringR=[],sc=1/(R0MIN+maxG*RING);
-  const MINFAN=Math.min(TAU*.94,(55+Math.min(125,list.length*1.5))*Math.PI/180);
-  for(let it=0;it<6;it++){if(sc*span<MINFAN)sc=MINFAN/span;if(sc*span>TAU*.94)sc=TAU*.94/span;ringR=[];
-    for(let gi=0;gi<=maxG;gi++){const need=isFinite(gapMin[gi])?MINARC/(sc*gapMin[gi]):0;ringR[gi]=Math.max(gi?ringR[gi-1]+RING:R0MIN,need)}
-    const ns=1/ringR[maxG];if(Math.abs(ns-sc)<1e-6)break;sc=Math.max(ns,sc*0.85)}
-  const R0=ringR[0],fanA0=-Math.PI/2+(x0-mid)*sc,fanA1=-Math.PI/2+(x1-mid)*sc;
-  const tree=new Map(),radial=new Map();
-  for(const p of list){const x=X.get(p.id),gg=g.get(p.id);tree.set(p.id,{x:x-mid,y:(gg-maxG/2)*ROW});
-    const a=-Math.PI/2+(x-mid)*sc,r=ringR[gg];radial.set(p.id,{x:r*Math.cos(a),y:r*Math.sin(a),a,r})}
-  // single generation-0 couple/person: pull into a tighter center feel
-  const groups=new Map();for(const p of list){const ps=p.parents.filter(has).sort();if(!ps.length)continue;const k=ps.join('|');if(!groups.has(k))groups.set(k,{parents:ps,kids:[]});groups.get(k).kids.push(p.id)}
+  for(let gi=1;gi<=maxG;gi++){const L=byGen[gi];L.forEach((u,i)=>u.x=1e9+i);sortL(L,downKey);ageOrder(L);pack(L);L.forEach(orient)}
+  for(let it=0;it<4;it++){for(let gi=maxG-1;gi>=0;gi--){sortL(byGen[gi],upKey);ageOrder(byGen[gi]);pack(byGen[gi])}
+    for(let gi=1;gi<=maxG;gi++){sortL(byGen[gi],downKey);ageOrder(byGen[gi]);pack(byGen[gi]);byGen[gi].forEach(orient)}}
+  byGen.forEach(L=>L.forEach((u,i)=>{u.i=i}));
+  // ---- positions. kOf(g) turns px into layout units for generation g: 1 for the tree, 1/radius (radians) for a ring.
+  // Every household reserves a wedge wide enough for all its descendants, so no family ever sits over another family's kids.
+  const SIB=-8,CPL=18,WEDGE=24;
+  const gapPx=(a,b)=>a.leaf&&b.leaf&&a.pk.some(k=>b.pk.includes(k))?(a.mem.length===1&&b.mem.length===1?SIB:CPL):UGAP;
+  const layout=kOf=>{
+    const W=u=>u.mem.length*SP*kOf(u.g),o=(u,i)=>(i-(u.mem.length-1)/2)*SP*kOf(u.g),C=new Map(),setC=u=>u.mem.forEach((m,i)=>C.set(m,u.c+o(u,i)));
+    const blockOf=new Map(),claimed=new Set();
+    const wedge=(A,B)=>{const a=A.units[A.units.length-1],b=B.units[0];return(A.plain&&B.plain?gapPx(a,b):UGAP+WEDGE)*kOf(a.g)};
+    for(let gi=maxG;gi>=0;gi--){const blocks=[];let cur=null;
+      for(const u of byGen[gi]){if(cur&&u.cu.size&&[...u.cu].some(x=>cur.kids.has(x))){cur.units.push(u);u.cu.forEach(x=>cur.kids.add(x))}else{cur={units:[u],kids:new Set(u.cu)};blocks.push(cur)}}
+      for(const B of blocks){B.own=B.units.reduce((s,u,i)=>s+W(u)+(i?gapPx(B.units[i-1],u)*kOf(gi):0),0);
+        const cb=[];for(const cu of B.kids){const b=blockOf.get(cu);if(b&&!claimed.has(b)){claimed.add(b);cb.push(b)}}
+        cb.sort((p,q)=>p.units[0].g-q.units[0].g||p.units[0].i-q.units[0].i);
+        let ext=0,run=0;cb.forEach((b,i)=>{const pv=cb[i-1];run=pv&&pv.units[0].g===b.units[0].g?run+wedge(pv,b)+b.need:b.need;ext=Math.max(ext,run)});
+        B.plain=!cb.length;B.need=Math.max(B.own,ext);B.units.forEach(u=>{blockOf.set(u,B);u.blk=B})}}
+    const sep=(a,b)=>{const base=(W(a)+W(b))/2+gapPx(a,b)*kOf(a.g),A=blockOf.get(a),B=blockOf.get(b);
+      return A===B?base:Math.max(base,(A.need+B.need)/2+wedge(A,B)-(A.own-W(a))/2-(B.own-W(b))/2)};
+    const place=(L,T)=>{if(!L.length)return;const c=[0];for(let i=1;i<L.length;i++)c[i]=c[i-1]+sep(L[i-1],L[i]);const st=[];
+      for(let i=0;i<L.length;i++){st.push({v:T[i]-c[i],n:1});while(st.length>1&&st[st.length-2].v>st[st.length-1].v){const b=st.pop(),a=st.pop();st.push({v:(a.v*a.n+b.v*b.n)/(a.n+b.n),n:a.n+b.n})}}
+      let i=0;for(const b of st)for(let j=0;j<b.n;j++,i++){L[i].c=b.v+c[i];setC(L[i])}};
+    const pm=m=>{const ps=P_(m).parents.filter(has);if(!ps.length||ps.some(x=>!C.has(x)))return null;return ps.reduce((s,x)=>s+C.get(x),0)/ps.length};
+    const down=u=>{let s=0,n=0;u.mem.forEach((m,i)=>{const v=pm(m);if(v!=null){s+=v-o(u,i);n++}});return n?s/n:null};
+    const up=u=>{let s=0,n=0;for(const m of u.mem)for(const c of kids.get(m))if(C.has(c)){s+=C.get(c);n++}return n?s/n:null};
+    for(const L of byGen)place(L,L.map(()=>0));
+    const both=u=>{const a=down(u),b=up(u);return a!=null&&b!=null?(a+b)/2:a??b??u.c};
+    for(let it=0;it<16;it++){for(let gi=0;gi<=maxG;gi++)place(byGen[gi],byGen[gi].map(both));for(let gi=maxG;gi>=0;gi--)place(byGen[gi],byGen[gi].map(both))}
+    for(let gi=maxG-1;gi>=0;gi--)place(byGen[gi],byGen[gi].map(u=>up(u)??u.c));
+    return C};
+  // ---- tree view
+  const TX=layout(()=>1);let x0=Infinity,x1=-Infinity;for(const v of TX.values()){x0=Math.min(x0,v);x1=Math.max(x1,v)}if(!TX.size){x0=x1=0}
+  const mid=(x0+x1)/2,tree=new Map(),radial=new Map();
+  for(const p of list)tree.set(p.id,{x:TX.get(p.id)-mid,y:(g.get(p.id)-maxG/2)*ROW});
+  // ---- constellation: rings as small as stays readable, growing only once a generation no longer fits round the circle
+  const R0MIN=140,RINGR=150,FULL=TAU*.93,FMAX=1.8;
+  let ringR=byGen.map((_,gi)=>R0MIN+gi*RINGR),fan=[-Math.PI/2,-Math.PI/2];
+  if(units.length){
+    const hw=u=>u.mem.length*SP/ringR[u.g]/2,span=()=>{let lo=Infinity,hi=-Infinity;for(const u of units){lo=Math.min(lo,u.c-hw(u));hi=Math.max(hi,u.c+hw(u))}return[lo,hi]};
+    layout(gi=>1/ringR[gi]);let[lo,hi]=span();
+    if(hi-lo>FULL){const kk=(hi-lo)/FULL;ringR=ringR.map(r=>r*kk);layout(gi=>1/ringR[gi]);[lo,hi]=span()}
+    // when there is room to spare, spread the households round the circle; a set of childless siblings stays a tight cluster,
+    // and so do the two sets of parents of one couple
+    const pure=new Set();for(const[k,gp]of groups)if(gp.kids.every(id=>!kids.get(id).length))pure.add(k);
+    const rigid=[];for(const L of byGen){let cur=null;for(const u of L){const k=u.leaf&&u.pk.length===1&&pure.has(u.pk[0])?u.pk[0]:u.blk.units.length>1?u.blk:null;if(cur&&k&&cur.k===k)cur.us.push(u);else{cur={k,us:[u]};rigid.push(cur)}}}
+    for(const G of rigid){const a=G.us[0],b=G.us[G.us.length-1];G.lo=a.c-hw(a);G.hi=b.c+hw(b);G.c=(G.lo+G.hi)/2;G.h=(G.hi-G.lo)/2}
+    const c0=(lo+hi)/2,extent=f=>{let l=Infinity,h=-Infinity;for(const G of rigid){const c=c0+(G.c-c0)*f;l=Math.min(l,c-G.h);h=Math.max(h,c+G.h)}return[l,h]};
+    const fits=f=>{const[l,h]=extent(f);return h-l<=FULL};
+    let f=1;if(hi-lo<FULL){if(fits(FMAX))f=FMAX;else{let a=1,b=FMAX;for(let i=0;i<24;i++){const m=(a+b)/2;if(fits(m))a=m;else b=m}f=a}}
+    const[l2,h2]=extent(f),cm=(l2+h2)/2;
+    for(const G of rigid)for(const u of G.us){const uc=c0+(G.c-c0)*f+(u.c-G.c)-cm,r=ringR[u.g];
+      u.mem.forEach((m,i)=>{const a=-Math.PI/2+uc+(i-(u.mem.length-1)/2)*SP/r;radial.set(m,{x:r*Math.cos(a),y:r*Math.sin(a),a,r})})}
+    fan=[-Math.PI/2+l2-cm,-Math.PI/2+h2-cm]}
   const pairs=[];for(const[a,s]of par)for(const b of s)if(a<b)pairs.push([a,b]);
   // household colours: every couple/parent-set is a household; child households get a nearby shade of their parents' hue
   const hsl=(h,s,l)=>{h=(((h%360)+360)%360)/360;const f=n=>{const k=(n+h*12)%12,a=s*Math.min(l,1-l);return Math.round(255*(l-a*Math.max(-1,Math.min(k-3,9-k,1))))};return[f(0),f(8),f(4)]};
@@ -308,18 +351,18 @@ function derive(){
   for(const[k,gp]of groups)addH(k,gp.parents);for(const[a,b]of pairs)addH(pk(a,b),[a,b]);
   const adultOf=new Map();for(const H of hh.values())for(const a of H.adults){if(!adultOf.has(a))adultOf.set(a,[]);adultOf.get(a).push(H)}
   const birthKey=id=>P_(id).parents.filter(has).sort().join('|');
-  const HL=[...hh.values()];for(const H of HL){H.g=Math.min(...H.adults.map(a=>g.get(a)));H.x=H.adults.reduce((s,a)=>s+X.get(a),0)/H.adults.length;H.births=[...new Set([...H.adults].sort((a,b)=>X.get(a)-X.get(b)).map(birthKey).filter(k=>k&&hh.has(k)))].slice(0,1)}
+  const HL=[...hh.values()];for(const H of HL){H.g=Math.min(...H.adults.map(a=>g.get(a)));H.x=H.adults.reduce((s,a)=>s+TX.get(a),0)/H.adults.length;H.births=[...new Set([...H.adults].sort((a,b)=>TX.get(a)-TX.get(b)).map(birthKey).filter(k=>k&&hh.has(k)))].slice(0,1)}
   HL.sort((a,b)=>a.g-b.g||a.x-b.x);
   const kidsOfBirth=new Map();for(const H of HL)for(const b of H.births){if(!kidsOfBirth.has(b))kidsOfBirth.set(b,[]);kidsOfBirth.get(b).push(H)}
   let ri=0;
   for(const H of HL){if(!H.births.length){H.h=ROOTH[ri++%ROOTH.length];H.s=.56;H.l=.5;continue}
-    let sx=0,sy=0,ls=0;for(const b of H.births){const B=hh.get(b),sib=kidsOfBirth.get(b),i=sib.indexOf(H),n=sib.length,step=Math.min(55,170/Math.max(1,n));const hue=(B.h+(i-(n-1)/2)*step)*Math.PI/180;sx+=Math.cos(hue);sy+=Math.sin(hue);ls+=B.l+(n>1?(i%2?.09:-.06):0)}
+    let sx=0,sy=0,ls=0;for(const b of H.births){const B=hh.get(b),sib=kidsOfBirth.get(b),i=sib.indexOf(H),n=sib.length,step=Math.min(55,170/Math.max(1,n));const j=i-(n-1)/2,hue=(B.h+j*step+(n>1?(j>=0?24:-24):0))*Math.PI/180;sx+=Math.cos(hue);sy+=Math.sin(hue);ls+=B.l+(n>1?(i%2?.09:-.06):0)}
     H.h=Math.atan2(sy,sx)*180/Math.PI;H.s=.58;H.l=clamp(ls/H.births.length,.38,.64)}
   const hcol=H=>hsl(H.h,H.s,H.l);const color=new Map(),ring=new Map(),hhColor=new Map();for(const H of HL)hhColor.set(H.key,hcol(H));
   for(const p of list){const own=(adultOf.get(p.id)||[])[0],birth=hh.get(birthKey(p.id)),main=own||birth;color.set(p.id,main?hcol(main):NEUTRAL);if(birth&&main!==birth)ring.set(p.id,hcol(birth))}
   // birthdays
   const bd=new Map(),soon=new Set();for(const p of list){const b=bdInfo(p);if(b){bd.set(p.id,b);if(!p.dead&&((b.next&&b.next.days<=14)||(b.heb?.next&&b.heb.next.days<=14)))soon.add(p.id)}}
-  K={...K,gen:g,maxG,tree,radial,groups,pairs,color,ring,hhColor,R0,ringR,fan:[fanA0,fanA1],halo:list.some(p=>p.halo),bd,soon,count:list.length};
+  K={...K,gen:g,maxG,tree,radial,groups,pairs,color,ring,hhColor,R0:ringR[0]||R0MIN,ringR,fan,pk:PK,halo:list.some(p=>p.halo),bd,soon,count:list.length};
   computeHL();
   $('#bdayDot').style.display=[...soon].some(id=>K.bd.get(id)?.next?.days<=7)?'block':'none';
 }
@@ -345,6 +388,7 @@ const nodeR=id=>(K.gen.get(id)===0||id===S.meId)?KR:NR;
 function visOff(){const sh=$('#sheet');const open=sh.classList.contains('open');if(!open)return{ox:0,oy:0,aw:vw,ah:vh-64};if(isMobile()){const h=sh.offsetHeight;return{ox:0,oy:(64-h)/2,aw:vw,ah:vh-64-h}}return{ox:-186,oy:32,aw:vw-372,ah:vh-64}}
 function setCamTarget(to,dur=650){camAnim={from:{...cam},to,t0:performance.now(),dur};req()}
 function fitView(anim=true){const L=curLayout();let to={x:0,y:0,s:.8};if(L.size){let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;for(const v of L.values()){x0=Math.min(x0,v.x);y0=Math.min(y0,v.y);x1=Math.max(x1,v.x);y1=Math.max(y1,v.y)}
+    if(S.mode==='radial'){x0=Math.min(x0,-80);x1=Math.max(x1,80);y0=Math.min(y0,-80);y1=Math.max(y1,80)}
     const pad=70,o=visOff();const s=clamp(Math.min(o.aw/(x1-x0+pad*2),o.ah/(y1-y0+pad*2+30)),.05,1.25);to={x:(x0+x1)/2-o.ox/s,y:(y0+y1)/2+12-o.oy/s,s}}
   if(anim)setCamTarget(to);else{Object.assign(cam,to);req()}}
 function flyTo(id,minS=.85){const p=curLayout().get(id);if(!p)return;const o=visOff();const s=Math.max(cam.s,minS);setCamTarget({x:p.x-o.ox/s,y:p.y-o.oy/s,s})}
@@ -384,13 +428,19 @@ function draw(ts){
   const order=ids.sort((a,b)=>(hl.nodes.has(a)?1:0)-(hl.nodes.has(b)?1:0)||(a===S.sel?1:0)-(b===S.sel?1:0));
   const pulse=(Math.sin(ts/380)+1)/2;
   for(const id of order)drawNode(id,P(id),dimOthers&&!hl.nodes.has(id),pulse);
-  for(const id of order)drawLabel(id,P(id),dimOthers&&!hl.nodes.has(id));
+  // names: most important first; a name is skipped when it would sit on another name or node (zooming in shows them all)
+  const vx0=cam.x-vw/2/s-150,vx1=cam.x+vw/2/s+150,vy0=cam.y-vh/2/s-150,vy1=cam.y+vh/2/s+150,boxes=[];
+  const vis=order.filter(id=>{const p=P(id);return p.x>vx0&&p.x<vx1&&p.y>vy0&&p.y<vy1});
+  for(const id of vis){const p=P(id),r=nodeR(id)+5;boxes.push([p.x-r,p.y-r,p.x+r,p.y+r,id])}
+  const pri=id=>id===S.sel?5:id===S.hover?4:id===S.meId?3:hl.nodes.has(id)?2:0;
+  vis.sort((a,b)=>pri(b)-pri(a)||K.gen.get(a)-K.gen.get(b));
+  for(const id of vis)drawLabel(id,P(id),dimOthers&&!hl.nodes.has(id),boxes,pri(id)>=3);
   c.restore();
   drawMini(P);
 }
 function drawGuides(w,P){const c=ctx,s=cam.s;if(!K.count)return;
   if(w>0){c.globalAlpha=w;
-    const pad=.22,full=(K.fan[1]-K.fan[0])+pad*2>=TAU*.97,A0=full?0:K.fan[0]-pad,A1=full?TAU:K.fan[1]+pad;
+    const pad=.22,full=K.fan[1]-K.fan[0]>=TAU*.7,A0=full?0:K.fan[0]-pad,A1=full?TAU:K.fan[1]+pad;
     for(let g=0;g<=K.maxG;g++){const r=K.ringR[g]||K.R0+g*RING,rn=K.ringR[g+1]||r+RING;c.beginPath();c.arc(0,0,r,A0,A1);c.strokeStyle='rgba(150,120,70,.16)';c.lineWidth=Math.max(1.4,1/s);c.stroke();
       if(g<K.maxG){c.beginPath();c.arc(0,0,(r+rn)/2,A0,A1);c.strokeStyle='rgba(150,120,70,.05)';c.lineWidth=Math.max(1,1/s);c.setLineDash([6,10]);c.stroke();c.setLineDash([])}
       const fs=Math.max(15,10/s);c.font=`600 ${fs}px Cinzel`;c.fillStyle='rgba(216,183,106,.35)';c.textAlign='center';c.textBaseline='middle';
@@ -458,12 +508,18 @@ function drawNode(id,p,dim,pulse){const c=ctx,s=cam.s,pr=P_(id),r=nodeR(id),col=
   if(id===S.meId){c.beginPath();c.arc(0,0,r+18,0,TAU);c.setLineDash([3,6]);c.lineWidth=1.4;c.strokeStyle='rgba(243,220,156,.7)';c.stroke();c.setLineDash([])}
   if(sr>9){c.fillStyle=pr.dead?'#d6d3cb':'#f6e7c0';c.font=`700 ${r*.62}px Cinzel`;c.textAlign='center';c.textBaseline='middle';c.fillText(initials(pr),0,1)}
   c.restore()}
-function drawLabel(id,p,dim){const c=ctx,s=cam.s,pr=P_(id),r=nodeR(id);const important=id===S.sel||id===S.hover||id===S.meId||K.hl.nodes.has(id);
-  const base=13;if(s<.27&&!important)return;if(dim&&s<.45)return;
-  const fs=Math.max(base,(important?11:9)/s);c.save();if(dim)c.globalAlpha=.45;c.font=`600 ${fs}px Cinzel`;c.textAlign='center';c.textBaseline='top';
-  const y=p.y+r+(r===KR?16:9);const t=shortName(pr);c.lineWidth=fs*.32;c.strokeStyle='rgba(6,4,3,.9)';c.strokeText(t,p.x,y);c.fillStyle=pr.dead?'#bdb8ad':'#efe2c2';c.fillText(t,p.x,y);
-  if(s>.9||id===S.sel){const sub=[pr.last,K.bd.get(id)?(pr.dead?`${parseD(pr.birth).getFullYear()}–${pr.death?pr.death.slice(0,4):''}`:`b. ${pr.birth.slice(0,4)}`):''].filter(Boolean).join(' · ');
-    if(sub){const f2=fs*.78;c.font=`500 ${f2}px Inter`;c.lineWidth=f2*.3;c.strokeText(sub,p.x,y+fs*1.15);c.fillStyle='#a89a7c';c.fillText(sub,p.x,y+fs*1.15)}}
+const TW=new Map();
+function textW(t,font){const k=font+'|'+t;let w=TW.get(k);if(w==null){ctx.save();ctx.font=font;w=ctx.measureText(t).width;ctx.restore();TW.set(k,w)}return w}
+function drawLabel(id,p,dim,boxes,force){const c=ctx,s=cam.s,pr=P_(id),r=nodeR(id);const important=id===S.sel||id===S.hover||id===S.meId||K.hl.nodes.has(id);
+  if(s<.2&&!important)return;if(dim&&s<.45)return;
+  const fs=Math.max(13,(important?11:9)/s),f2=fs*.78,t=shortName(pr),y=p.y+r+(r===KR?16:9);
+  const sub=s>.9||id===S.sel?[pr.last,K.bd.get(id)?(pr.dead?`${parseD(pr.birth).getFullYear()}–${pr.death?pr.death.slice(0,4):''}`:`b. ${pr.birth.slice(0,4)}`):''].filter(Boolean).join(' · '):'';
+  const hw=Math.max(textW(t,'600 100px Cinzel')*fs,sub?textW(sub,'500 100px Inter')*f2:0)/200+3/s,x0=p.x-hw,x1=p.x+hw,y0=y-1/s,y1=y+fs*1.08+(sub?fs*.95:0);
+  if(!force)for(const b of boxes)if(b[4]!==id&&x0<b[2]&&x1>b[0]&&y0<b[3]&&y1>b[1])return;
+  boxes.push([x0,y0,x1,y1,id]);
+  c.save();if(dim)c.globalAlpha=.45;c.font=`600 ${fs}px Cinzel`;c.textAlign='center';c.textBaseline='top';
+  c.lineWidth=fs*.32;c.strokeStyle='rgba(6,4,3,.9)';c.strokeText(t,p.x,y);c.fillStyle=pr.dead?'#bdb8ad':'#efe2c2';c.fillText(t,p.x,y);
+  if(sub){c.font=`500 ${f2}px Inter`;c.lineWidth=f2*.3;c.strokeText(sub,p.x,y+fs*1.15);c.fillStyle='#a89a7c';c.fillText(sub,p.x,y+fs*1.15)}
   c.restore()}
 let miniB=null;
 function drawMini(P){const show=K.count>=6;mini.style.display=show?'block':'none';if(!show)return;const w=150,h=104,d=dpr;if(mini.width!==w*d){mini.width=w*d;mini.height=h*d}
@@ -533,7 +589,21 @@ body.addEventListener('click',e=>{const t=e.target.closest('[data-go],[data-act]
   else if(a==='me')setMe(S.meId===id?null:id);
   else if(a==='del')delPerson(id);
   else if(a==='center')flyTo(id,1);
+  else if(a==='ordsibs')orderDlg(K.pk.get(id));
+  else if(a==='ordkids'){const gs=[...K.groups].filter(([k,g])=>g.parents.includes(id)).sort((x,y)=>y[1].kids.length-x[1].kids.length);if(gs.length)orderDlg(gs[0][0])}
 });
+/* siblings sort themselves by birthday; this sets the order for anyone whose birthday isn't in yet */
+function orderDlg(key){const gp=K.groups.get(key);if(!gp||gp.kids.length<2)return toast('Nothing to order yet');if(S.readOnly)return;const arr=gp.kids.slice();
+  const draw=()=>{const st=dlg.scrollTop;dlg.innerHTML=`<h3>Age order</h3><p class="hint" style="margin-top:4px">Oldest at the top. Anyone with a birthday is placed by it automatically — use the arrows for the rest.</p>
+    <div class="list" style="gap:6px;margin-top:10px">${arr.map((id,i)=>{const p=P_(id);return`<div class="ordrow"><span class="n">${i+1}</span><span class="m">${esc(fullName(p))}${p.birth?`<i>${esc(fmtD(parseD(p.birth)))}</i>`:''}</span><button data-mv="-1" data-i="${i}" ${i?'':'disabled'} aria-label="Older">▲</button><button data-mv="1" data-i="${i}" ${i<arr.length-1?'':'disabled'} aria-label="Younger">▼</button></div>`}).join('')}</div>
+    <div class="row"><button class="btn ghost" data-v="0">Cancel</button><button class="btn" data-v="1">Save order</button></div>`;dlg.scrollTop=st};
+  openModal('',true);draw();
+  dlg.onclick=e=>{const t=e.target.closest('button');if(!t)return;
+    if(t.dataset.v==='0')return closeModal();
+    if(t.dataset.v==='1'){const ch=new Map();arr.forEach((id,n)=>{const p=P_(id);if(p&&p.ord!==n){const c=clone(p);c.ord=n;ch.set(id,c)}});closeModal();if(ch.size)commit(ch).then(()=>{toast('Age order saved');fitView()});return}
+    if(t.dataset.mv){const i=+t.dataset.i,j=i+ +t.dataset.mv;if(j<0||j>=arr.length)return;
+      if(P_(arr[i]).birth&&P_(arr[j]).birth)return toast('Those two are placed by their birthdays');
+      [arr[i],arr[j]]=[arr[j],arr[i]];draw()}}}
 function chipList(ids){return ids.length?`<div class="chips">${ids.map(i=>{const r=relToMe(i);return`<button class="chip" data-go="${i}">${esc(fullName(P_(i)))}${r&&i!==S.meId?`<i>${esc(r.label)}</i>`:''}</button>`}).join('')}</div>`:'<div class="hint" style="margin:0">None yet</div>'}
 function personHTML(id){const p=P_(id);if(!p)return'';const b=K.bd.get(id),r=relToMe(id),ro=S.readOnly;
   let rel='';if(id===S.meId)rel=`<div class="rel">✦ This is you</div>`;else if(r)rel=`<div class="rel">Your ${esc(r.label)}${r.side?` <small>· ${esc(r.side)}</small>`:''}</div>`;else if(meOk())rel=`<div class="rel"><small>Not connected to you yet</small></div>`;
@@ -557,7 +627,7 @@ function personHTML(id){const p=P_(id);if(!p)return'';const b=K.bd.get(id),r=rel
   return`<div class="sh-head"><h2>${esc(fullName(p))}${p.hebName?`<div class="hebname" dir="rtl">${esc(p.hebName)}</div>`:''}${p.nick||p.maiden?`<div class="nick">${[p.nick?`“${esc(p.nick)}”`:'',p.maiden?`Maiden name: ${esc(p.maiden)}`:''].filter(Boolean).join(' · ')}</div>`:''}</h2><button class="x" data-x aria-label="Close">×</button></div>${rel}<div class="orn"></div>
   <div class="facts">${facts.join('')}</div>${acts}
   <div class="sec">PARENTS</div>${chipList(pars)}<div class="sec">PARTNER${parts.length>1?'S':''}</div>${chipList(parts)}
-  <div class="sec">CHILDREN</div>${chipList(kids)}<div class="sec">SIBLINGS</div>${chipList(sibs)}
+  <div class="sec">CHILDREN</div>${chipList(kids)}${!ro&&kids.length>1?'<button class="lnk" data-act="ordkids">Set age order</button>':''}<div class="sec">SIBLINGS</div>${chipList(sibs)}${!ro&&sibs.length?'<button class="lnk" data-act="ordsibs">Set age order</button>':''}
   <div class="row"><button class="btn ghost" data-act="center">Centre on map</button></div>`}
 function bdaysHTML(){const he=S.bdayCal==='he'&&!!HEB;const rows=[];
   for(const[id,b]of K.bd){const p=P_(id);if(p.dead)continue;const n=he?b.heb?.next:b.next;if(!n)continue;rows.push({id,p,n})}
@@ -778,7 +848,7 @@ function resolveNames(E){const norm1=s=>s.toLowerCase().replace(/[^a-z֐-׿ ]/g,
   return E}
 let XLSXp=null;
 function loadXLSX(){if(window.XLSX)return Promise.resolve(window.XLSX);if(XLSXp)return XLSXp;XLSXp=new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=()=>res(window.XLSX);s.onerror=()=>{XLSXp=null;rej(new Error('xlsx'))};document.head.appendChild(s)});return XLSXp}
-function importDlgFamily(){IMP.files=[];const ai=!!DB.sample;
+function importDlgFamily(){checkUpdate();IMP.files=[];const ai=!!DB.sample;
   openModal(`<h3>Import family info</h3>
    <p class="hint" style="margin-top:4px">Paste whatever people send you — texts, WhatsApp replies, emails, lists — or upload spreadsheets and screenshots. You’ll review everything before anything is saved.</p>
    <div class="row"><button class="btn ghost" id="impAsk">Copy message to send family</button></div>
@@ -901,7 +971,7 @@ async function finishImport(){const E=IMP.entries.filter(e=>e.include);const ch=
   toast(`Added ${added}, updated ${updated}${skipped?` · ${skipped} link${skipped>1?'s':''} skipped (would clash)`:''}`,3500)}
 
 /* ---------- persistence: local first, Firebase mirror ---------- */
-const APP={title:'Family Constellation',key:'familytree-v1',dbPath:'familytree/main',build:'Build 7 · 24 Nov 2026',adminHash:'8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92',
+const APP={title:'Family Constellation',key:'familytree-v1',dbPath:'familytree/main',build:'Build 8 · 24 Nov 2026',adminHash:'8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92',
   links:[{label:'Stored data',url:'https://console.firebase.google.com/project/shopping-eb9b3/database/shopping-eb9b3-default-rtdb/data/~2Ffamilytree~2Fmain'},
     {label:'Firebase rules',url:'https://console.firebase.google.com/project/shopping-eb9b3/database/shopping-eb9b3-default-rtdb/rules'},
     {label:'GitHub repository',url:'https://github.com/Eli-Meyer42/FamilyTree'},
@@ -934,7 +1004,7 @@ function logText(){const p=n=>String(n).padStart(2,'0');const stamp=t=>{const d=
   return[APP.title+' — activity log','exported: '+stamp(Date.now()),'build: '+APP.build,'entries: '+actlog.length,'agent: '+navigator.userAgent,''.padEnd(60,'-'),''].join('\n')+actlog.map(e=>stamp(e.t)+'  '+e.k.padEnd(14)+'  '+e.d).join('\n')+'\n'}
 function downloadFile(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:type||'text/plain'}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
 let rev=0,cloudRef=null,cloudSeen=0,pushT=null,syncState='off';
-function snap(){const people={};for(const p of S.people.values()){const{id,...r}=p;people[id]=r}return{familyName:S.familyName,people,rev}}
+function snap(){const people={};for(const p of S.people.values()){const{id,...r}=p;for(const k in r)if(r[k]==null)delete r[k];people[id]=r}return{familyName:S.familyName,people,rev}}
 function applyState(d){if(!d||typeof d!=='object')return false;rev=d.rev||0;const m=new Map(),ps=d.people&&typeof d.people==='object'?d.people:{};
   for(const[id,o]of Object.entries(ps))if(okId(id))m.set(id,norm(o,id));S.people=m;if(typeof d.familyName==='string'&&d.familyName.trim())S.familyName=d.familyName.slice(0,40);return true}
 async function save(){rev=Date.now();const ok=await STORE.set(APP.key,JSON.stringify(snap()));cloudPush();if(!ok&&!save.warned){save.warned=true;toast('This browser won’t let the app save — download a backup before closing',5000)}return ok}
@@ -959,7 +1029,20 @@ function saveFamilyName(v){if(S.readOnly)return;S.familyName=v;$('#famName').tex
 function setMe(id){S.meId=id;lsSet(APP.key+'-me',id);derive();computeHL();if(S.sheet)renderSheet();req()}
 const ADMIN_KEY=APP.key+'-admin';
 async function sha256(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
-function setAdmin(on){S.readOnly=!on;lsSet(ADMIN_KEY,on?APP.adminHash:null);log(on?'unlock':'lock','');derive();updateChrome();if(S.sheet)renderSheet();req()}
+function setAdmin(on){S.readOnly=!on;lsSet(ADMIN_KEY,on?APP.adminHash:null);log(on?'unlock':'lock','');derive();updateChrome();if(S.sheet)renderSheet();req();if(on)setTimeout(offerCleanup,500)}
+/* heading rows from the family spreadsheet that an older build imported as if they were people */
+function junkRows(){return[...S.people.values()].filter(p=>/^\s*▸/.test(p.first)&&!p.parents.some(has)&&!p.partners.some(has)&&!(K.kids.get(p.id)||[]).length)}
+async function offerCleanup(){if(S.readOnly||offerCleanup.busy||$('#modal').classList.contains('open'))return;const j=junkRows();if(!j.length)return;offerCleanup.busy=true;
+  const ok=await confirmBox(`Remove ${j.length} heading row${j.length>1?'s':''}?`,`These are the colored family headings from the spreadsheet, imported as people by mistake: ${j.map(p=>p.first.replace(/^\s*▸\s*/,'')).join(' · ')}. No real person is affected.`,'Remove them',true);
+  offerCleanup.busy=false;if(!ok)return;const n=j.length;await commit(new Map(),j.map(p=>p.id));log('cleanup',n+' heading rows removed');toast(`Removed ${n} heading rows`);fitView()}
+/* tell an open tab when a newer build has been published, so nobody keeps working in an old one */
+let updAt=0;
+async function checkUpdate(){if(location.protocol==='file:'||Date.now()-updAt<12e4)return;updAt=Date.now();
+  try{const r=await fetch('./index.html',{cache:'no-store',headers:{accept:'text/html'}});if(!r.ok)return;
+    const m=(await r.text()).match(/build:'Build (\d+)/),cur=APP.build.match(/Build (\d+)/);
+    if(m&&cur&&+m[1]>+cur[1]){$('#upd').style.display='block';log('update','Build '+m[1]+' is available')}}catch(e){}}
+$('#upd').onclick=()=>location.reload();
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 async function tryUnlock(code){let h='';try{h=await sha256(String(code).trim())}catch(e){return toast('Unlocking needs a secure (https) page',3000)}
   if(h===APP.adminHash){setAdmin(true);toast('Editing unlocked on this device')}else{toast('That code isn’t right');log('unlock-fail','')}}
 async function wipe(){const ids=[...S.people.keys()];closeSheet();await commit(new Map(),ids);setMe(null);log('wipe','all people cleared');toast('Tree cleared')}
@@ -994,10 +1077,10 @@ function loadSample(){const t=today0();const soon=(days,year)=>{const d=new Date
   log('open',APP.build);
   S.storage=S.people.size||typeof firebase==='undefined'?'cloud':'loading';
   resize();derive();updateChrome();fitView(false);
-  if(document.fonts?.ready)document.fonts.ready.then(()=>{gradCache.clear();req()});
+  if(document.fonts?.ready)document.fonts.ready.then(()=>{gradCache.clear();TW.clear();req()});
   if(window.claude?.use)window.claude.use('sample').then(s=>{DB.sample=s||null}).catch(()=>{});
-  let done=false;const first=()=>{if(done)return;done=true;const wasLoading=S.storage==='loading';S.storage='cloud';derive();updateChrome();if(wasLoading)fitView(false);req()};
-  setTimeout(first,4000);
+  let done=false;const first=()=>{if(done)return;done=true;const wasLoading=S.storage==='loading';S.storage='cloud';derive();updateChrome();if(wasLoading)fitView(false);req();setTimeout(offerCleanup,700)};
+  setTimeout(first,4000);setTimeout(checkUpdate,5000);
   cloudStart(first);
 })();
 if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
