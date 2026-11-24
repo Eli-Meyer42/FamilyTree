@@ -273,7 +273,9 @@ function derive(){
     for(const B of blocks){B.own=B.units.reduce((s,u)=>s+width(u),0)+UGAP*(B.units.length-1);const cb=[];
       for(const cu of B.kids){const b=blockOf.get(cu);if(b&&!claimed.has(b)){claimed.add(b);cb.push(b)}}
       B.need=Math.max(B.own,cb.reduce((s,b)=>s+b.need,0)+(UGAP+24)*Math.max(0,cb.length-1));B.units.forEach(u=>blockOf.set(u,B))}}
-  const sep=(a,b)=>{const base=(width(a)+width(b))/2+UGAP,A=blockOf.get(a),B=blockOf.get(b);if(!A||A===B)return base;
+  const pkeyU=u=>{for(const m of u.mem){const ps=P_(m).parents.filter(has);if(ps.length)return ps.sort().join('|')}return null};
+  const leaf=u=>u.mem.every(m=>!kids.get(m).length);
+  const sep=(a,b)=>{const sib=leaf(a)&&leaf(b)&&pkeyU(a)&&pkeyU(a)===pkeyU(b);const base=(width(a)+width(b))/2+(sib?-14:UGAP),A=blockOf.get(a),B=blockOf.get(b);if(!A||A===B)return base;
     return Math.max(base+24,(A.need+B.need)/2+UGAP+24-(A.own-width(a))/2-(B.own-width(b))/2)};
   const place=(L,T)=>{if(!L.length)return;const c=[0];for(let i=1;i<L.length;i++)c[i]=c[i-1]+sep(L[i-1],L[i]);const st=[];
     for(let i=0;i<L.length;i++){st.push({v:T[i]-c[i],n:1});while(st.length>1&&st[st.length-2].v>st[st.length-1].v){const b=st.pop(),a=st.pop();st.push({v:(a.v*a.n+b.v*b.n)/(a.n+b.n),n:a.n+b.n})}}
@@ -288,7 +290,7 @@ function derive(){
   const R0MIN=150,MINARC=SP*0.82,gapMin=[];
   for(let gi=0;gi<=maxG;gi++){const xs=byGen[gi].flatMap(u=>u.mem.map(m=>X.get(m))).sort((a,b)=>a-b);let d=Infinity;for(let i=1;i<xs.length;i++)d=Math.min(d,xs[i]-xs[i-1]);gapMin[gi]=d}
   let ringR=[],sc=1/(R0MIN+maxG*RING);
-  const MINFAN=Math.min(TAU*.94,(110+Math.min(110,list.length*3))*Math.PI/180);
+  const MINFAN=Math.min(TAU*.94,(55+Math.min(125,list.length*1.5))*Math.PI/180);
   for(let it=0;it<6;it++){if(sc*span<MINFAN)sc=MINFAN/span;if(sc*span>TAU*.94)sc=TAU*.94/span;ringR=[];
     for(let gi=0;gi<=maxG;gi++){const need=isFinite(gapMin[gi])?MINARC/(sc*gapMin[gi]):0;ringR[gi]=Math.max(gi?ringR[gi-1]+RING:R0MIN,need)}
     const ns=1/ringR[maxG];if(Math.abs(ns-sc)<1e-6)break;sc=Math.max(ns,sc*0.85)}
@@ -567,26 +569,26 @@ function searchResults(q){q=q.trim().toLowerCase();const all=[...S.people.values
 function menuHTML(){const ro=S.readOnly;const opts=[...S.people.values()].sort((a,b)=>fullName(a).localeCompare(fullName(b))).map(p=>`<option value="${p.id}" ${p.id===S.meId?'selected':''}>${esc(fullName(p))}</option>`).join('');
   return`<div class="sh-head"><h2>The Archive</h2><button class="x" data-x>×</button></div><div class="orn"></div>
   <div class="hint" style="margin-top:0">${K.count} ${K.count===1?'person':'people'} · ${K.count?K.maxG+1:0} generation${K.maxG?'s':''}</div>
-  <label class="f">Family name</label><div style="display:flex;gap:8px"><input id="famIn" value="${esc(S.familyName)}" ${ro?'disabled':''} maxlength="40"><button class="btn" id="famSave" style="flex:none" ${ro?'disabled':''}>Save</button></div>
+  ${ro?'':`<label class="f">Family name</label><div style="display:flex;gap:8px"><input id="famIn" value="${esc(S.familyName)}" maxlength="40"><button class="btn" id="famSave" style="flex:none">Save</button></div>`}
   <label class="f">I am…</label><select id="meSel"><option value="">— Not set —</option>${opts}</select>
   <div class="hint">Setting yourself shows how everyone is related to you, and lights up the path between you and whoever you tap.</div>
   <label class="f">Layout</label><div class="seg"><button id="mR" class="${S.mode==='radial'?'on':''}">Constellation</button><button id="mT" class="${S.mode==='tree'?'on':''}">Tree</button></div>
   <div class="sec">EDITING</div>${ro?`<div class="hint" style="margin-top:0">View only on this device. Enter the family code to add or change people.</div><div style="display:flex;gap:8px;margin-top:8px"><input id="admCode" type="password" inputmode="numeric" autocomplete="off" placeholder="Family code"><button class="btn" id="admGo" style="flex:none">Unlock</button></div>`:`<div class="hint" style="margin-top:0">✦ Editing is unlocked on this device.</div><div class="row"><button class="btn ghost" id="admLock">Lock editing</button></div>`}
-  <div class="sec">SYNC</div><div class="syncrow"><span class="syncdot ${syncState}" id="syncdot"></span><span id="syncword"></span></div>
-  <div class="sec">BACKUP</div><div class="row" style="margin-top:0"><button class="btn ghost" id="bkDl">Download backup</button><button class="btn ghost" id="bkImp" ${ro?'disabled':''}>Restore…</button></div>
+  ${ro?'':`<div class="sec">SYNC</div><div class="syncrow"><span class="syncdot ${syncState}" id="syncdot"></span><span id="syncword"></span></div>
+  <div class="sec">BACKUP</div><div class="row" style="margin-top:0"><button class="btn ghost" id="bkDl">Download backup</button><button class="btn ghost" id="bkImp">Restore…</button></div>
   ${ro?'':`<div class="sec">ADD PEOPLE</div><div class="row" style="margin-top:0"><button class="btn" id="impFam">Import family info</button></div><div class="row"><button class="btn ghost" id="addRoot">Add unlinked person</button></div>
   <div class="row"><button class="btn ghost" id="sample">Load sample family</button><button class="btn danger" id="wipe" ${K.count?'':'disabled'}>Clear tree</button></div>`}
   <div class="sec">ACTIVITY LOG</div><div class="hint" style="margin-top:0">${actlog.length?actlog.length+' entries recorded.':'No activity recorded yet.'}</div><div class="row"><button class="btn ghost" id="logDl">Export log</button><button class="btn ghost" id="logClr">Clear log</button></div>
   <div class="sec">LINKS</div><div class="list">${APP.links.map(l=>`<a class="btn ghost" style="display:block;text-align:center;text-decoration:none;margin-top:6px" target="_blank" rel="noopener" href="${esc(l.url)}">${esc(l.label)}</a>`).join('')}</div>
-  <p class="buildstamp">${esc(APP.build)}</p>`}
+  <p class="buildstamp">${esc(APP.build)}</p>`}`}
 function bindMenu(){const g=s=>$(s);g('#meSel').onchange=e=>setMe(e.target.value||null);g('#mR').onclick=()=>setMode('radial');g('#mT').onclick=()=>setMode('tree');
   if(g('#famSave'))g('#famSave').onclick=()=>{const v=g('#famIn').value.trim().slice(0,40)||'Our Family';saveFamilyName(v)};
   cloudSay(syncState);
   if(g('#admGo')){const go=()=>tryUnlock(g('#admCode').value);g('#admGo').onclick=go;g('#admCode').onkeydown=e=>{if(e.key==='Enter')go()}}
   if(g('#admLock'))g('#admLock').onclick=()=>{setAdmin(false);toast('Locked — view only')};
-  g('#bkDl').onclick=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');downloadFile(`${APP.key}-backup-${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}.json`,JSON.stringify({familyName:S.familyName,people:[...S.people.values()]},null,1),'application/json');log('backup','downloaded '+K.count+' people');toast('Backup downloaded')};
-  g('#logDl').onclick=()=>{if(!actlog.length)return toast('Nothing in the log yet');downloadFile(APP.key+'-log.txt',logText());toast('Log exported')};
-  g('#logClr').onclick=()=>{actlog=[];try{STORE.set(LOG_KEY,'[]')}catch(e){}renderSheet();toast('Log cleared')};
+  if(g('#bkDl'))g('#bkDl').onclick=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');downloadFile(`${APP.key}-backup-${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}.json`,JSON.stringify({familyName:S.familyName,people:[...S.people.values()]},null,1),'application/json');log('backup','downloaded '+K.count+' people');toast('Backup downloaded')};
+  if(g('#logDl'))g('#logDl').onclick=()=>{if(!actlog.length)return toast('Nothing in the log yet');downloadFile(APP.key+'-log.txt',logText());toast('Log exported')};
+  if(g('#logClr'))g('#logClr').onclick=()=>{actlog=[];try{STORE.set(LOG_KEY,'[]')}catch(e){}renderSheet();toast('Log cleared')};
   if(g('#bkImp'))g('#bkImp').onclick=importDlg;
   if(g('#impFam'))g('#impFam').onclick=importDlgFamily;
   if(g('#addRoot'))g('#addRoot').onclick=()=>openForm({kind:'add',rel:'root'});
@@ -893,7 +895,7 @@ async function finishImport(){const E=IMP.entries.filter(e=>e.include);const ch=
   toast(`Added ${added}, updated ${updated}${skipped?` · ${skipped} link${skipped>1?'s':''} skipped (would clash)`:''}`,3500)}
 
 /* ---------- persistence: local first, Firebase mirror ---------- */
-const APP={title:'Family Constellation',key:'familytree-v1',dbPath:'familytree/main',build:'Build 5 · 24 Nov 2026',adminHash:'8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92',
+const APP={title:'Family Constellation',key:'familytree-v1',dbPath:'familytree/main',build:'Build 6 · 24 Nov 2026',adminHash:'8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92',
   links:[{label:'Stored data',url:'https://console.firebase.google.com/project/shopping-eb9b3/database/shopping-eb9b3-default-rtdb/data/~2Ffamilytree~2Fmain'},
     {label:'Firebase rules',url:'https://console.firebase.google.com/project/shopping-eb9b3/database/shopping-eb9b3-default-rtdb/rules'},
     {label:'GitHub repository',url:'https://github.com/Eli-Meyer42/FamilyTree'},
